@@ -20,7 +20,7 @@
 ## 快速开始
 
 ```cmd
-go get github.com/VegetableDoggie/go-ethx@v1.0.0
+go get github.com/VegetableDoggie/go-ethx@v1.1.0
 ```
 > 1- 可靠接口请求
 ```go
