@@ -58,17 +58,13 @@ func NewClientx(clientIterator *Iterator[*ethclient.Client], confirmBlocks, notF
 			if blockNumber > c.autoBlockNumber {
 				c.autoBlockNumber = blockNumber
 			}
-			select {
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 		}
 	}()
 	queryTicker := time.NewTicker(100 * time.Millisecond)
 	defer queryTicker.Stop()
 	for c.autoBlockNumber == 0 {
-		select {
-		case <-queryTicker.C:
-		}
+		<-queryTicker.C
 	}
 	return c
 }
@@ -353,9 +349,7 @@ func (c *Clientx) BlockByHash(hash any, notFoundBlocks ...uint64) (block *types.
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -381,9 +375,7 @@ func (c *Clientx) BlockByNumber(blockNumber any, notFoundBlocks ...uint64) (bloc
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -405,9 +397,7 @@ func (c *Clientx) HeaderByHash(hash any, notFoundBlocks ...uint64) (header *type
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -430,9 +420,7 @@ func (c *Clientx) HeaderByNumber(blockNumber any, notFoundBlocks ...uint64) (hea
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -454,9 +442,7 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -483,9 +469,7 @@ func (c *Clientx) TransactionSender(tx *types.Transaction, blockHash any, index 
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -507,9 +491,7 @@ func (c *Clientx) TransactionCount(blockHash any, notFoundBlocks ...uint64) (cou
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -546,9 +528,7 @@ func (c *Clientx) TransactionInBlock(blockHash any, index uint, notFoundBlocks .
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -571,9 +551,7 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 				if notFoundStopBlockNumber >= c.autoBlockNumber {
 					return
 				}
-				select {
-				case <-queryTicker.C:
-				}
+				<-queryTicker.C
 			}
 			continue
 		}
@@ -607,9 +585,7 @@ func (c *Clientx) WaitMined(tx *types.Transaction, notFoundBlocks ...uint64) (*t
 				return receipt, nil
 			}
 		}
-		select {
-		case <-queryTicker.C:
-		}
+		<-queryTicker.C
 	}
 }
 

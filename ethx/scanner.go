@@ -12,16 +12,18 @@ import (
 	"sync"
 )
 
-const key = "ctx-chain-map"
+type key int
+
+const key0 = key(0)
 
 type AddressTopic0LogsMap = map[common.Address]map[common.Hash][]*types.Log
 
 func ScannerCtx(ctx context.Context) context.Context {
-	return context.WithValue(ctx, key, make(AddressTopic0LogsMap))
+	return context.WithValue(ctx, key0, make(AddressTopic0LogsMap))
 }
 
 func ScannerCtxValue(ctx context.Context) (addressTopic0LogsMap AddressTopic0LogsMap) {
-	if t := ctx.Value(key); t != nil {
+	if t := ctx.Value(key0); t != nil {
 		return t.(AddressTopic0LogsMap)
 	}
 	return nil
@@ -105,7 +107,7 @@ func (s *Scanner) Scan(ctx context.Context, from, to uint64) (logs []types.Log, 
 
 	s.execute(from, to, s.IntervalPerScan, fetch)
 
-	if t := ctx.Value(key); t != nil {
+	if t := ctx.Value(key0); t != nil {
 		addressTopic0LogsMap = t.(AddressTopic0LogsMap)
 		for k := range addressTopic0LogsMap {
 			delete(addressTopic0LogsMap, k)
@@ -113,11 +115,11 @@ func (s *Scanner) Scan(ctx context.Context, from, to uint64) (logs []types.Log, 
 	} else {
 		addressTopic0LogsMap = make(AddressTopic0LogsMap)
 	}
-	for _, log := range logs {
-		if addressTopic0LogsMap[log.Address] == nil {
-			addressTopic0LogsMap[log.Address] = make(map[common.Hash][]*types.Log)
+	for _, o := range logs {
+		if addressTopic0LogsMap[o.Address] == nil {
+			addressTopic0LogsMap[o.Address] = make(map[common.Hash][]*types.Log)
 		}
-		addressTopic0LogsMap[log.Address][log.Topics[0]] = append(addressTopic0LogsMap[log.Address][log.Topics[0]], &log)
+		addressTopic0LogsMap[o.Address][o.Topics[0]] = append(addressTopic0LogsMap[o.Address][o.Topics[0]], &o)
 	}
 
 	return logs, addressTopic0LogsMap
