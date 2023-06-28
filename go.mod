@@ -1,4 +1,4 @@
-module github.com/VegetableDoggie/go-ethx
+module github.com/VegetableDoggies/go-ethx
 
 go 1.18
 
