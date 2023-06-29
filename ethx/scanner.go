@@ -69,7 +69,10 @@ func (s *Scanner) Scan(ctx context.Context, from, to uint64) (logs []types.Log, 
 		return
 	}
 	defer s.mu0.Unlock()
-
+	if from+s.DelayBlocks > to {
+		return
+	}
+	to -= s.DelayBlocks
 	fetch := func(from, to uint64) {
 		var (
 			err   error
