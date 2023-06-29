@@ -97,7 +97,7 @@ func (c *Clientx) BlockNumber() (blockNumber uint64) {
 	var err error
 	for i := 0; ; i++ {
 		blockNumber, err = c.WaitNext().BlockNumber(c.ctx)
-		if err != nil {
+		if err != nil || blockNumber == 0 {
 			if i > c.logErrThreshold {
 				log.Printf("[ERROR] BlockNumber: %v", err)
 			}

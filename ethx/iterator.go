@@ -24,10 +24,13 @@ func NewClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 	for i, rpc := range rpcList {
 		client, err := ethclient.Dial(rpc)
 		if err == nil {
-			for j := 1; j < weightList[i]; j++ {
+			blockNumber, err := client.BlockNumber(context.TODO())
+			if err == nil && blockNumber > 0 {
+				for j := 1; j < weightList[i]; j++ {
+					reliableClients = append(reliableClients, client)
+				}
 				reliableClients = append(reliableClients, client)
 			}
-			reliableClients = append(reliableClients, client)
 		}
 	}
 	if len(reliableClients) == 0 {
