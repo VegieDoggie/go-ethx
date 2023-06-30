@@ -19,30 +19,30 @@
 
 ## 快速开始
 
-```cmd
+```go
 go get github.com/VegetableDoggies/go-ethx@v2.0.0
 ```
 > 1- 可靠接口请求
-```cmd
+```go
 func main() {
     rpcList := []string{
         "https://data-seed-prebsc-2-s2.binance.org:8545",
         "https://data-seed-prebsc-2-s1.binance.org:8545",
     }
     weights := []int{1, 2}
-	// 参数3: 交易默认确认块数
+    // 参数3: 交易默认确认块数
     clientx := NewClientx(rpcList, weights,30)
 
-	// auto block number test
-	go func() {
-		queryTicker := time.NewTicker(time.Second)
-		defer queryTicker.Stop()
-		for {
+    // auto block number test
+    go func() {
+	queryTicker := time.NewTicker(time.Second)
+	defer queryTicker.Stop()
+	for {
             fmt.Println("AutoBlockNumber", clientx.AutoBlockNumber)
-			<-queryTicker.C
-		}
-	}()
-	select {}
+	    <-queryTicker.C
+	}
+    }()
+    select {}
 }
 // 控制台输出
 AutoBlockNumber 31138256
@@ -70,7 +70,7 @@ AutoBlockNumber 31138259
 为了确保同一个区块范围同时被多个rpc节点扫描，这样即使某节点出问题，也不会漏块。假如你正在持续扫描最新块的日志，在切分=200，延迟=3，回溯=800的情况下，同一个区块预计将被扫描 `800/3=266次`，这种恐怖的数量足以保证只要有任意节点正常，就一定会命中!
 
 ------
-```cmd
+```go
 func main() {
     rpcList := []string{
         "https://data-seed-prebsc-2-s2.binance.org:8545",
@@ -104,7 +104,7 @@ func main() {
 ```
 
 > 3- 常用的转换函数及大数运算函数
-```cmd
+```go
 // To Hash
 fmt.Println(ethx.Hash("1")) // 0x0000000000000000000000000000000000000000000000000000000000000001
 fmt.Println(ethx.Hash(1)) // 0x0000000000000000000000000000000000000000000000000000000000000001
