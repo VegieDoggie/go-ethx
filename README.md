@@ -25,7 +25,7 @@ go get github.com/VegetableDoggies/go-ethx@v2.0.0
 > 1- 可靠接口请求(完整接口请查看文档末尾的`接口概览`)
 ```go
 func main() {
-    // 说明: 如果某个rpc是坏接口，则该rpc将自动被剔除。
+    // 说明: Clientx初始化时会自动剔除其中不连通的RPC接口
     rpcList := []string{
         "https://data-seed-prebsc-2-s2.binance.org:8545",
         "https://data-seed-prebsc-2-s1.binance.org:8545",
