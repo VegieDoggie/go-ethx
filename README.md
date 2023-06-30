@@ -22,7 +22,7 @@
 ```go
 go get github.com/VegetableDoggies/go-ethx@v2.0.0
 ```
-> 1- 可靠接口请求
+> 1- 可靠接口请求(完整接口请查看文档末尾的`接口概览`)
 ```go
 func main() {
     rpcList := []string{
