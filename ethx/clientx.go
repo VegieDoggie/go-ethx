@@ -12,6 +12,7 @@ import (
 	"golang.org/x/time/rate"
 	"log"
 	"math/big"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -51,7 +52,7 @@ func NewClientx(rpcList []string, weights []int, notFoundBlocks uint64, limiter 
 				client = c.Next()
 				blockNumber, err = client.BlockNumber(c.Ctx)
 				if err != nil {
-					log.Println(fmt.Sprintf("[ERROR] %v BlockNumber %v %v", c.RpcMap[client], blockNumber, err))
+					log.Printf("[ERROR] %v BlockNumber %v %v\n", c.RpcMap[client], blockNumber, err)
 					<-queryTicker.C
 					continue
 				}
@@ -69,6 +70,78 @@ func NewClientx(rpcList []string, weights []int, notFoundBlocks uint64, limiter 
 		<-queryTicker.C
 	}
 	return c
+}
+
+var rpcRegx, _ = regexp.Compile(`((?:https|wss|http|ws)[^\s\n\\"]+)`)
+
+// CheckRpcConn returns what rpcs are reliable and what rpcs are bad
+// example:
+//  1. CheckRpcConn("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
+//  2. CheckRpcConn("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org") // auto resolve rpc list
+func CheckRpcConn(rpcLike ...string) (reliableRpcList, badRpcList []string, reliableClients []*ethclient.Client, reliableRpcMap map[*ethclient.Client]string) {
+	var (
+		err    error
+		client *ethclient.Client
+		logs   []types.Log
+		query  = ethereum.FilterQuery{
+			FromBlock: new(big.Int).SetUint64(0),
+			ToBlock:   new(big.Int).SetUint64(1000),
+		}
+	)
+	reliableRpcMap = make(map[*ethclient.Client]string)
+	log.Println("CheckRpcConn start......")
+	for _, iRpc := range rpcLike {
+		rpcList := rpcRegx.FindAllString(iRpc, -1)
+		for _, jRpc := range rpcList {
+			client, err = ethclient.Dial(jRpc)
+			if err == nil {
+				logs, err = client.FilterLogs(context.TODO(), query)
+				if err == nil && len(logs) > 0 {
+					reliableRpcMap[client] = jRpc
+					reliableClients = append(reliableClients, client)
+					reliableRpcList = append(reliableRpcList, jRpc)
+					log.Println("reliable", jRpc)
+					continue
+				}
+			}
+			badRpcList = append(badRpcList, jRpc)
+			log.Println("bad", jRpc)
+		}
+	}
+	log.Println("CheckRpcConn finished......")
+	return
+}
+
+// CheckRpcSpeed returns the rpc speed list
+// example:
+//  1. CheckRpcSpeed("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
+//  2. CheckRpcSpeed("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
+func CheckRpcSpeed(rpcLike ...string) (rpcSpeedMap map[string]time.Duration) {
+	var (
+		err         error
+		client      *ethclient.Client
+		blockNumber uint64
+		t           time.Time
+	)
+	rpcSpeedMap = make(map[string]time.Duration)
+	log.Println("CheckRpcSpeed start......")
+	for _, iRpc := range rpcLike {
+		rpcList := rpcRegx.FindAllString(iRpc, -1)
+		for _, jRpc := range rpcList {
+			client, err = ethclient.Dial(jRpc)
+			if err == nil {
+				t = time.Now()
+				blockNumber, err = client.BlockNumber(context.TODO())
+				if err == nil && blockNumber > 0 {
+					rpcSpeedMap[jRpc] = time.Since(t)
+					log.Println(jRpc, rpcSpeedMap[jRpc])
+					continue
+				}
+			}
+		}
+	}
+	log.Println("CheckRpcSpeed finished......")
+	return
 }
 
 // newClientIteratorWithWeight creates a clientIterator with wights.
@@ -93,7 +166,7 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 				continue
 			}
 		}
-		log.Println(fmt.Sprintf("[ClientX] Bad Rpc: %v", rpc))
+		log.Printf("[ClientX] Bad Rpc: %v\n", rpc)
 	}
 	if len(reliableClients) == 0 {
 		panic("No reliable rpc nodes connection!")
@@ -117,7 +190,7 @@ func (c *Clientx) BlockNumber() (blockNumber uint64) {
 		client := c.WaitNext()
 		blockNumber, err = client.BlockNumber(c.Ctx)
 		if err != nil || blockNumber == 0 {
-			log.Println(fmt.Sprintf("[ERROR] %v BlockNumber %v %v", c.RpcMap[client], blockNumber, err))
+			log.Printf("[ERROR] %v BlockNumber %v %v\n", c.RpcMap[client], blockNumber, err)
 			continue
 		}
 		return
@@ -131,7 +204,7 @@ func (c *Clientx) ChainID() (chainID *big.Int) {
 		client := c.WaitNext()
 		chainID, err = client.ChainID(c.Ctx)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v ChainID %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v ChainID %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -145,7 +218,7 @@ func (c *Clientx) NetworkID() (networkID *big.Int) {
 		client := c.WaitNext()
 		networkID, err = client.NetworkID(c.Ctx)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v NetworkID %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v NetworkID %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -160,7 +233,7 @@ func (c *Clientx) BalanceAt(account, blockNumber any) (balance *big.Int) {
 		client := c.WaitNext()
 		balance, err = client.BalanceAt(c.Ctx, Address(account), BigInt(blockNumber))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v BalanceAt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v BalanceAt %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -174,7 +247,7 @@ func (c *Clientx) PendingBalanceAt(account any) (balance *big.Int) {
 		client := c.WaitNext()
 		balance, err = client.PendingBalanceAt(c.Ctx, Address(account))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v PendingBalanceAt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v PendingBalanceAt %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -189,7 +262,7 @@ func (c *Clientx) NonceAt(account, blockNumber any) (nonce uint64) {
 		client := c.WaitNext()
 		nonce, err = client.NonceAt(c.Ctx, Address(account), BigInt(blockNumber))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v NonceAt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v NonceAt %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -204,7 +277,7 @@ func (c *Clientx) PendingNonceAt(account any) (nonce uint64) {
 		client := c.WaitNext()
 		nonce, err = client.PendingNonceAt(c.Ctx, Address(account))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v PendingNonceAt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v PendingNonceAt %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -218,7 +291,7 @@ func (c *Clientx) FilterLogs(q ethereum.FilterQuery) (logs []types.Log) {
 		client := c.WaitNext()
 		logs, err = client.FilterLogs(c.Ctx, q)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v FilterLogs %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v FilterLogs %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -233,7 +306,7 @@ func (c *Clientx) SuggestGasPrice() (gasPrice *big.Int) {
 		client := c.WaitNext()
 		gasPrice, err = client.SuggestGasPrice(c.Ctx)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v SuggestGasPrice %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v SuggestGasPrice %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -248,7 +321,7 @@ func (c *Clientx) SuggestGasTipCap() (gasTipCap *big.Int) {
 		client := c.WaitNext()
 		gasTipCap, err = client.SuggestGasTipCap(c.Ctx)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v SuggestGasTipCap %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v SuggestGasTipCap %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -262,7 +335,7 @@ func (c *Clientx) FeeHistory(blockCount uint64, lastBlock any, rewardPercentiles
 		client := c.WaitNext()
 		feeHistory, err = client.FeeHistory(c.Ctx, blockCount, BigInt(lastBlock), rewardPercentiles)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v FeeHistory %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v FeeHistory %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -277,7 +350,7 @@ func (c *Clientx) StorageAt(account, keyHash, blockNumber any) (storage []byte) 
 		client := c.WaitNext()
 		storage, err = client.StorageAt(c.Ctx, Address(account), Hash(keyHash), BigInt(blockNumber))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v StorageAt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v StorageAt %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -291,7 +364,7 @@ func (c *Clientx) PendingStorageAt(account, keyHash any) (storage []byte) {
 		client := c.WaitNext()
 		storage, err = client.PendingStorageAt(c.Ctx, Address(account), Hash(keyHash))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v PendingStorageAt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v PendingStorageAt %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -306,7 +379,7 @@ func (c *Clientx) CodeAt(account, blockNumber any) (code []byte) {
 		client := c.WaitNext()
 		code, err = client.CodeAt(c.Ctx, Address(account), BigInt(blockNumber))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v CodeAt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v CodeAt %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -320,7 +393,7 @@ func (c *Clientx) PendingCodeAt(account any) (code []byte) {
 		client := c.WaitNext()
 		code, err = client.PendingCodeAt(c.Ctx, Address(account))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v PendingCodeAt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v PendingCodeAt %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -347,7 +420,7 @@ func (c *Clientx) BlockByHash(hash any, notFoundBlocks ...uint64) (block *types.
 		client := c.WaitNext()
 		block, err = client.BlockByHash(c.Ctx, Hash(hash))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v BlockByHash %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v BlockByHash %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -376,7 +449,7 @@ func (c *Clientx) BlockByNumber(blockNumber any, notFoundBlocks ...uint64) (bloc
 		client := c.WaitNext()
 		block, err = client.BlockByNumber(c.Ctx, BigInt(blockNumber))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v BlockByNumber %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v BlockByNumber %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -401,7 +474,7 @@ func (c *Clientx) HeaderByHash(hash any, notFoundBlocks ...uint64) (header *type
 		client := c.WaitNext()
 		header, err = client.HeaderByHash(c.Ctx, Hash(hash))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v HeaderByHash %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v HeaderByHash %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -427,7 +500,7 @@ func (c *Clientx) HeaderByNumber(blockNumber any, notFoundBlocks ...uint64) (hea
 		client := c.WaitNext()
 		header, err = client.HeaderByNumber(c.Ctx, BigInt(blockNumber))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v HeaderByNumber %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v HeaderByNumber %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -452,7 +525,7 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 		client := c.WaitNext()
 		tx, isPending, err = client.TransactionByHash(c.Ctx, Hash(hash))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v TransactionByHash %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v TransactionByHash %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -482,7 +555,7 @@ func (c *Clientx) TransactionSender(tx *types.Transaction, blockHash any, index 
 		client := c.WaitNext()
 		sender, err = client.TransactionSender(c.Ctx, tx, Hash(blockHash), index)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v TransactionSender %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v TransactionSender %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -507,7 +580,7 @@ func (c *Clientx) TransactionCount(blockHash any, notFoundBlocks ...uint64) (cou
 		client := c.WaitNext()
 		count, err = client.TransactionCount(c.Ctx, Hash(blockHash))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v TransactionCount %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v TransactionCount %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -530,7 +603,7 @@ func (c *Clientx) PendingTransactionCount() (count uint) {
 		client := c.WaitNext()
 		count, err = client.PendingTransactionCount(c.Ctx)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v PendingTransactionCount %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v PendingTransactionCount %v\n", c.RpcMap[client], err)
 			continue
 		}
 		return
@@ -546,7 +619,7 @@ func (c *Clientx) TransactionInBlock(blockHash any, index uint, notFoundBlocks .
 		client := c.WaitNext()
 		tx, err = client.TransactionInBlock(c.Ctx, Hash(blockHash), index)
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v TransactionInBlock %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v TransactionInBlock %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -572,7 +645,7 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 		client := c.WaitNext()
 		receipt, err = client.TransactionReceipt(c.Ctx, Hash(txHash))
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v TransactionReceipt %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v TransactionReceipt %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -599,7 +672,7 @@ func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoun
 		client := c.WaitNext()
 		receipt, err := client.TransactionReceipt(c.Ctx, tx.Hash())
 		if err != nil {
-			log.Println(fmt.Sprintf("[ERROR] %v WaitMined %v", c.RpcMap[client], err))
+			log.Printf("[ERROR] %v WaitMined %v\n", c.RpcMap[client], err)
 			if errors.Is(err, ethereum.NotFound) {
 				if notFoundStopBlockNumber == 0 {
 					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
@@ -689,7 +762,7 @@ func (s *Scanner) Scan(from, to uint64) (logs []types.Log, addressTopicLogsMap A
 			query.FromBlock = new(big.Int).SetUint64(from)
 		}
 		nLogs := s.FilterLogs(query)
-		log.Println(fmt.Sprintf("Scan start for: %v-%v Success!", from, to))
+		log.Printf("Scan start for: %v-%v Success!\n", from, to)
 		if len(nLogs) > 0 {
 			s.Mu.Lock()
 			var hashID string
