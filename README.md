@@ -20,7 +20,7 @@
 ## 快速开始
 > 默认情况下，并发的最大数量=rpc的数量，这一限制是安全的，你可以循环或并发地进行接口调用，限流会很好的处理并发。
 ```go
-go get github.com/VegetableDoggies/go-ethx@v1.3.0
+go get github.com/VegetableDoggies/go-ethx@v1.4.0
 ```
 > 1- 可靠接口请求(完整接口请查看文档末尾的`接口概览`)
 ```go
