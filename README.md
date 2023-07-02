@@ -212,4 +212,8 @@ Is0b(s string) bool
 Is0o(s string) bool
 # 随机字节组，如例: ethx.Hash(ethx.RandBytes(32))
 RandBytes(len int) []byte
+# Rpc 检查连通性和响应速率
+CheckRpcSpeed(rpcLike ...string) (rpcSpeedMap map[string]time.Duration)
+CheckRpcConn(rpcLike ...string) (reliableRpcList []string, badRpcList []string, reliableClients []*ethclient.Client, reliableRpcMap map[*ethclient.Client]string)
+
 ```
