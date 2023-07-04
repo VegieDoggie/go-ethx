@@ -167,31 +167,31 @@ func Sum(numLike ...any) *big.Int {
 
 func Gte(numLike0, numLike1 any, isAbs ...bool) bool {
 	if len(isAbs) > 0 && isAbs[0] {
+		return BigInt(numLike0).CmpAbs(BigInt(numLike1)) >= 0
+	} else {
+		return BigInt(numLike0).Cmp(BigInt(numLike1)) >= 0
+	}
+}
+
+func Gt(numLike0, numLike1 any, isAbs ...bool) bool {
+	if len(isAbs) > 0 && isAbs[0] {
+		return BigInt(numLike0).CmpAbs(BigInt(numLike1)) == 1
+	} else {
+		return BigInt(numLike0).Cmp(BigInt(numLike1)) == 1
+	}
+}
+
+func Lte(numLike0, numLike1 any, isAbs ...bool) bool {
+	if len(isAbs) > 0 && isAbs[0] {
 		return BigInt(numLike0).CmpAbs(BigInt(numLike1)) <= 0
 	} else {
 		return BigInt(numLike0).Cmp(BigInt(numLike1)) <= 0
 	}
 }
 
-func Gt(numLike0, numLike1 any, isAbs ...bool) bool {
-	if len(isAbs) > 0 && isAbs[0] {
-		return BigInt(numLike0).CmpAbs(BigInt(numLike1)) == -1
-	} else {
-		return BigInt(numLike0).Cmp(BigInt(numLike1)) == -1
-	}
-}
-
-func Lte(numLike0, numLike1 any, isAbs ...bool) bool {
-	if len(isAbs) > 0 && isAbs[0] {
-		return BigInt(numLike0).CmpAbs(BigInt(numLike1)) >= 0
-	} else {
-		return BigInt(numLike0).Cmp(BigInt(numLike1)) == -1
-	}
-}
-
 func Lt(numLike0, numLike1 any, isAbs ...bool) bool {
 	if len(isAbs) > 0 && isAbs[0] {
-		return BigInt(numLike0).CmpAbs(BigInt(numLike1)) == 1
+		return BigInt(numLike0).CmpAbs(BigInt(numLike1)) == -1
 	} else {
 		return BigInt(numLike0).Cmp(BigInt(numLike1)) == -1
 	}
