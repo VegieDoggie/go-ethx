@@ -76,7 +76,7 @@ func TestUtils(t *testing.T) {
 	fmt.Println(Sub(Address(1), Hash(0)))    // 1
 	fmt.Println(Mul("0x2", 5))               // 10
 	fmt.Println(Div("10", 2))                // 5
-	fmt.Println(Gte(Address(1), Address(2))) // true
+	fmt.Println(Gte(Address(1), Address(1))) // true
 	fmt.Println(Gt(Address(1), Address(1)))  // false
 	fmt.Println(Lte(Address(1), Address(1))) // true
 	fmt.Println(Lt(Address(1), Address(1)))  // false
