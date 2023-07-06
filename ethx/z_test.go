@@ -1,9 +1,8 @@
 package ethx
 
 import (
-	"context"
 	"fmt"
-	"golang.org/x/time/rate"
+	"log"
 	"testing"
 	"time"
 )
@@ -40,12 +39,12 @@ func TestScanner(t *testing.T) {
 }
 
 func TestLimit(t *testing.T) {
-	defaultLimiter := rate.NewLimiter(5, 5)
-	ctx := context.TODO()
-	for i := 0; ; i++ {
-		_ = defaultLimiter.Wait(ctx)
-		fmt.Println(i)
-	}
+	//defaultLimiter := rate.NewLimiter(5, 5)
+	//ctx := context.TODO()
+	//for i := 0; ; i++ {
+	//	_ = defaultLimiter.Wait(ctx)
+	//	fmt.Println(i)
+	//}
 }
 
 func TestUtils(t *testing.T) {
@@ -69,6 +68,22 @@ func TestUtils(t *testing.T) {
 	fmt.Println(BigInt("0x1")) // 1
 	fmt.Println(BigInt("0b1")) // 1
 	fmt.Println(BigInt("0o1")) // 1
+	nums := []string{
+		"1",
+		"123456",
+		"123456789",
+		"0x1",
+		"0X1",
+		"0o1",
+		"0O1",
+		"0b1",
+		"0B1",
+		"0xfffff",
+		"aaa",
+	}
+	for _, s := range nums {
+		log.Println(BigInt([]byte(s)))
+	}
 
 	// + - * / 和 比较
 	fmt.Println(Add("1", 2, 3, Hash(1)))     // 7

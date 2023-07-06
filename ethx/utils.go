@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"math/rand"
 	"reflect"
+	"regexp"
 )
 
 // Hash hashLike is non-nil
@@ -38,6 +39,13 @@ func Address(addressLike any) common.Address {
 	}
 }
 
+var (
+	r10, _ = regexp.Compile(`^[0-9]+$`)
+	r2, _  = regexp.Compile(`^0[bB][01]+$`)
+	r8, _  = regexp.Compile(`^0[oO][0-7]+$`)
+	r16, _ = regexp.Compile(`^0[xX][0-9a-fA-F]+$`)
+)
+
 func BigInt(numLike any) *big.Int {
 	if numLike == nil {
 		return nil
@@ -53,10 +61,20 @@ func BigInt(numLike any) *big.Int {
 		return value.Big()
 	case common.Hash:
 		return value.Big()
-	case *[]byte:
-		return new(big.Int).SetBytes(*value)
 	case []byte:
-		return new(big.Int).SetBytes(value)
+		s := string(value)
+		switch {
+		case r10.MatchString(s):
+			return stringBig(s, 10)
+		case r16.MatchString(s):
+			return stringBig(s[2:], 16)
+		case r2.MatchString(s):
+			return stringBig(s[2:], 2)
+		case r8.MatchString(s):
+			return stringBig(s[2:], 8)
+		default:
+			return new(big.Int).SetBytes(value)
+		}
 	case int:
 		return big.NewInt(int64(value))
 	case int8:
@@ -84,29 +102,13 @@ func BigInt(numLike any) *big.Int {
 	case string:
 		switch {
 		case Is0x(value):
-			v, b := new(big.Int).SetString(value[2:], 16)
-			if !b {
-				log.Panicf("Unknown numLike: %v", value)
-			}
-			return v
+			return stringBig(value[2:], 16)
 		case Is0b(value):
-			v, b := new(big.Int).SetString(value[2:], 2)
-			if !b {
-				log.Panicf("Unknown numLike: %v", value)
-			}
-			return v
+			return stringBig(value[2:], 2)
 		case Is0o(value):
-			v, b := new(big.Int).SetString(value[2:], 8)
-			if !b {
-				log.Panicf("Unknown numLike: %v", value)
-			}
-			return v
+			return stringBig(value[2:], 8)
 		default:
-			v, b := new(big.Int).SetString(value, 10)
-			if !b {
-				log.Panicf("Unknown numLike: %v", value)
-			}
-			return v
+			return stringBig(value, 10)
 		}
 	case bool:
 		if value {
@@ -123,6 +125,14 @@ func BigInt(numLike any) *big.Int {
 		log.Panicf("Unknown numLike: %v", value)
 		return nil
 	}
+}
+
+func stringBig(value string, base int) *big.Int {
+	v, b := new(big.Int).SetString(value, base)
+	if !b {
+		log.Panicf("Unknown numLike: %v", value)
+	}
+	return v
 }
 
 func Uint64(numLike any) uint64 {
