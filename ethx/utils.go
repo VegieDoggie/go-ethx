@@ -167,6 +167,11 @@ func Div(numLike0, numLike1 any) *big.Int {
 	return new(big.Int).Div(BigInt(numLike0), BigInt(numLike1))
 }
 
+func MulDiv(numLike0, numLike1, numLike2 any) *big.Int {
+	r := new(big.Int).Mul(BigInt(numLike0), BigInt(numLike1))
+	return r.Div(r, BigInt(numLike2))
+}
+
 func Sum(numLike ...any) *big.Int {
 	num := new(big.Int)
 	for i := range numLike {
