@@ -20,7 +20,7 @@
 ## 快速开始
 > 默认情况下，并发的最大数量=rpc的数量，这一限制是安全的，你可以放心地循环或并发地进行接口调用。
 ```go
-go get github.com/VegetableDoggies/go-ethx@v1.5.2
+go get github.com/VegetableDoggies/go-ethx@v1.5.3
 ```
 > 1- 可靠接口请求(完整接口请查看文档末尾的`接口概览`)
 ```go
@@ -141,7 +141,12 @@ fmt.Println(Lte(Address(1), Address(1))) // true
 fmt.Println(Lt(Address(1), Address(1)))  // false
 fmt.Println(Uint64(Address(1)))          // 1
 fmt.Println(Int64(Address(1)))           // 1
-
+fmt.Println(BigInt("1e3"))   // 1000
+fmt.Println(BigInt("10E3"))  // 10000
+fmt.Println(BigInt("2^3"))   // 8
+fmt.Println(BigInt("20^3"))  // 8000
+fmt.Println(BigInt("2^3^3")) // 134217728
+fmt.Println(BigInt("2^27"))  // 134217728
 // 随机
 fmt.Println(Hash(RandBytes(32)))    // 0x06e4ba3da81342545e60108a576ef5590ee56800ef285bd692923b696f05fa44
 fmt.Println(Address(RandBytes(20))) // 0x8807B00e663fD283ff7e9C1291EFF9D6963290Da
