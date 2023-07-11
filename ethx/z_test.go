@@ -63,11 +63,17 @@ func TestUtils(t *testing.T) {
 	fmt.Println(Address("0o1")) // 0x0000000000000000000000000000000000000001
 
 	// To BigInt
-	fmt.Println(BigInt("1"))   // 1
-	fmt.Println(BigInt(1))     // 1
-	fmt.Println(BigInt("0x1")) // 1
-	fmt.Println(BigInt("0b1")) // 1
-	fmt.Println(BigInt("0o1")) // 1
+	fmt.Println(BigInt("1"))     // 1
+	fmt.Println(BigInt(1))       // 1
+	fmt.Println(BigInt("0x1"))   // 1
+	fmt.Println(BigInt("0b1"))   // 1
+	fmt.Println(BigInt("0o1"))   // 1
+	fmt.Println(BigInt("1e3"))   // 1000
+	fmt.Println(BigInt("10E3"))  // 10000
+	fmt.Println(BigInt("2^3"))   // 8
+	fmt.Println(BigInt("20^3"))  // 8000
+	fmt.Println(BigInt("2^3^3")) // 134217728
+	fmt.Println(BigInt("2^27"))  // 134217728
 	nums := []string{
 		"1",
 		"123456",

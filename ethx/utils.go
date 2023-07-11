@@ -44,6 +44,8 @@ var (
 	r2, _  = regexp.Compile(`^0[bB][01]+$`)
 	r8, _  = regexp.Compile(`^0[oO][0-7]+$`)
 	r16, _ = regexp.Compile(`^0[xX][0-9a-fA-F]+$`)
+
+	bigInt10 = big.NewInt(10)
 )
 
 func BigInt(numLike any) *big.Int {
@@ -108,6 +110,14 @@ func BigInt(numLike any) *big.Int {
 		case Is0o(value):
 			return stringBig(value[2:], 8)
 		default:
+			for i := range value {
+				switch value[i] {
+				case 'e', 'E':
+					return Mul(value[:i], new(big.Int).Exp(bigInt10, stringBig(value[i+1:], 10), nil))
+				case '^':
+					return Mul(new(big.Int).Exp(BigInt(value[:i]), BigInt(value[i+1:]), nil))
+				}
+			}
 			return stringBig(value, 10)
 		}
 	case bool:
