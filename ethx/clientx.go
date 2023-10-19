@@ -749,19 +749,20 @@ func (s *Scanner) Scan(from, to uint64) (logs []types.Log, addressTopicLogsMap A
 	}
 	to -= s.DelayBlocks
 	s.Iterator.Shuffle()
-	fetch := func(from_, to_ uint64) {
-		// Attention!!!Repeat scanning to_ prevent missing blocks
+	fetch := func(from, to uint64) {
+		// Attention!!!Repeat scanning to prevent missing blocks
 		var query = ethereum.FilterQuery{
-			FromBlock: new(big.Int).SetUint64(from_),
-			ToBlock:   new(big.Int).SetUint64(to_),
+			ToBlock:   new(big.Int).SetUint64(to),
 			Addresses: s.Addresses,
 			Topics:    s.Topics,
 		}
-		if to_ > s.OverrideBlocks {
-			query.ToBlock = new(big.Int).SetUint64(to_ - s.OverrideBlocks)
+		if from >= s.OverrideBlocks {
+			query.FromBlock = new(big.Int).SetUint64(from - s.OverrideBlocks)
+		} else {
+			query.FromBlock = new(big.Int).SetUint64(from)
 		}
 		nLogs := s.FilterLogs(query)
-		log.Printf("Scan start for: %v-%v Success!\n", from_, to_)
+		log.Printf("Scan start for: %v-%v Success!\n", from, to)
 		if len(nLogs) > 0 {
 			s.Mu.Lock()
 			var hashID string
