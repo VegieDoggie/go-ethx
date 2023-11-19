@@ -59,9 +59,9 @@ func main() {
 	}
     }()
 	// 可靠地合约接口请求(适用于读取链上合约数据)
-    must := NewMust(clientx, UniswapV2Pair.NewUniswapV2Pair, "0xbe8561968ce5f9a9bf5cf6a117dfdee1b0e56d75")
-    token0 := must(new(UniswapV2Pair.UniswapV2Pair).Token0)[0].(common.Address)
-    token1 := must(new(UniswapV2Pair.UniswapV2Pair).Token1)[0].(common.Address)
+    must := clientx.NewMust(UniswapV2Pair.NewUniswapV2Pair, "0xbe8561968ce5f9a9bf5cf6a117dfdee1b0e56d75")
+    token0 := must(new(UniswapV2Pair.UniswapV2Pair).Token0)[0].(common.Address) // ~ must("Token0")[0].(common.Address)
+    token1 := must(new(UniswapV2Pair.UniswapV2Pair).Token1)[0].(common.Address) // ~ must("Token1")[0].(common.Address)
     domain := fc.TypeSlice[[32]byte](must(new(UniswapV2Pair.UniswapV2Pair).DOMAINSEPARATOR))[0]
     log.Println(token0, token1, string(domain[:]))
     select {}
