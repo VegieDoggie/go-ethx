@@ -35,7 +35,7 @@
 ## 快速开始
 > 默认情况下，并发的最大数量=rpc的数量，这一限制是安全的，你可以放心地循环或并发地进行接口调用。
 ```go
-go get github.com/VegetableDoggies/go-ethx@v1.5.3
+go get github.com/VegetableDoggies/go-ethx@v1.5.5
 ```
 > 1- 可靠接口请求(完整接口请查看文档末尾的`接口概览`)
 ```go
@@ -58,6 +58,12 @@ func main() {
 	    <-queryTicker.C
 	}
     }()
+	// 可靠地合约接口请求(适用于读取链上合约数据)
+    must := NewMust(clientx, UniswapV2Pair.NewUniswapV2Pair, "0xbe8561968ce5f9a9bf5cf6a117dfdee1b0e56d75")
+    token0 := must(new(UniswapV2Pair.UniswapV2Pair).Token0)[0].(common.Address)
+    token1 := must(new(UniswapV2Pair.UniswapV2Pair).Token1)[0].(common.Address)
+    domain := fc.TypeSlice[[32]byte](must(new(UniswapV2Pair.UniswapV2Pair).DOMAINSEPARATOR))[0]
+    log.Println(token0, token1, string(domain[:]))
     select {}
 }
 // 控制台输出
