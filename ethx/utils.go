@@ -1,6 +1,8 @@
 package ethx
 
 import (
+	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"log"
 	"math/big"
@@ -37,6 +39,62 @@ func Address(addressLike any) common.Address {
 	default:
 		return common.BigToAddress(BigInt(addressLike))
 	}
+}
+
+// AddressSlice parse any to []common.Address
+func AddressSlice(addressLikeArr any) (addresses []common.Address) {
+	arrValue := reflect.ValueOf(addressLikeArr)
+	if arrValue.Kind() != reflect.Slice {
+		panic(errors.New(fmt.Sprintf("param is not a slice: %v", addressLikeArr)))
+	}
+	n := arrValue.Len()
+	addresses = make([]common.Address, n)
+	for i := 0; i < n; i++ {
+		addresses[i] = Address(arrValue.Index(i).Interface())
+	}
+	return addresses
+}
+
+// HashSlice parse any to []common.Hash
+func HashSlice(hashLikeArr any) (hashes []common.Hash) {
+	arrValue := reflect.ValueOf(hashLikeArr)
+	if arrValue.Kind() != reflect.Slice {
+		panic(errors.New(fmt.Sprintf("param is not a slice: %v", hashLikeArr)))
+	}
+	n := arrValue.Len()
+	hashes = make([]common.Hash, n)
+	for i := 0; i < n; i++ {
+		hashes[i] = Hash(arrValue.Index(i).Interface())
+	}
+	return hashes
+}
+
+// BigIntSlice parse any to []*big.Int
+func BigIntSlice(bigLikeArr any) (bigInts []*big.Int) {
+	arrValue := reflect.ValueOf(bigLikeArr)
+	if arrValue.Kind() != reflect.Slice {
+		panic(errors.New(fmt.Sprintf("param is not a slice: %v", bigLikeArr)))
+	}
+	n := arrValue.Len()
+	bigInts = make([]*big.Int, n)
+	for i := 0; i < n; i++ {
+		bigInts[i] = BigInt(arrValue.Index(i).Interface())
+	}
+	return bigInts
+}
+
+// TypeSlice assert any to []T
+func TypeSlice[T any](arr any) []T {
+	arrValue := reflect.ValueOf(arr)
+	if arrValue.Kind() != reflect.Slice {
+		panic(errors.New(fmt.Sprintf("param is not a slice: %v", arr)))
+	}
+	n := arrValue.Len()
+	vals := make([]T, n)
+	for i := 0; i < n; i++ {
+		vals[i] = arrValue.Index(i).Interface().(T)
+	}
+	return vals
 }
 
 var (

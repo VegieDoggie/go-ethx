@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"golang.org/x/time/rate"
 	"log"
+	"math"
 	"math/big"
 	"regexp"
 	"sync"
@@ -173,6 +174,28 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 	}
 	clientIterator = NewIterator[*ethclient.Client](reliableClients, limiter...).Shuffle()
 	return
+}
+
+func (c *Clientx) NewMust(constructor any, addressLike any, maxErrNum ...int) func(f any, args ...any) []any {
+	n := math.MaxInt
+	if len(maxErrNum) > 0 {
+		n = maxErrNum[0]
+	}
+	address := Address(addressLike)
+	return func(f any, args ...any) []any {
+		for i := 0; i < n; i++ {
+			ret := callFunc(constructor, address, c.WaitNext())
+			if err, ok := ret[len(ret)-1].(error); ok {
+				panic(err)
+			}
+			ret = callStructFunc(ret[0], f, args...)
+			if _, ok := ret[len(ret)-1].(error); ok {
+				continue
+			}
+			return ret[:len(ret)-1]
+		}
+		panic(errors.New(fmt.Sprintf("%v [%v]: exceed maxErrNum(%v)", address, getFuncName(f), n)))
+	}
 }
 
 // Close all clients connections.
@@ -801,6 +824,8 @@ func (s *Scanner) execute(from, to, interval uint64, fc func(from, to uint64)) {
 			wg.Done()
 		}(i)
 	}
-	fc(from+count*interval, to)
+	if from+count*interval < to {
+		fc(from+count*interval, to)
+	}
 	wg.Wait()
 }
