@@ -84,7 +84,7 @@ func BigIntSlice(bigLikeArr any) (bigInts []*big.Int) {
 	return bigInts
 }
 
-// Type assert any to T
+// Type smart assert any to T
 func Type[T any](x any) T {
 	return abi.ConvertType(x, *new(T)).(T)
 }
