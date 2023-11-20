@@ -42,7 +42,7 @@ func Address(addressLike any) common.Address {
 	}
 }
 
-// AddressSlice parse any to []common.Address
+// AddressSlice parse any to []common.Address, eg: []string to []common.Address
 func AddressSlice(addressLikeArr any) (addresses []common.Address) {
 	arrValue := reflect.ValueOf(addressLikeArr)
 	if arrValue.Kind() != reflect.Slice {
@@ -56,7 +56,7 @@ func AddressSlice(addressLikeArr any) (addresses []common.Address) {
 	return addresses
 }
 
-// HashSlice parse any to []common.Hash
+// HashSlice parse any to []common.Hash, eg: []string to []common.Hash
 func HashSlice(hashLikeArr any) (hashes []common.Hash) {
 	arrValue := reflect.ValueOf(hashLikeArr)
 	if arrValue.Kind() != reflect.Slice {
@@ -70,7 +70,7 @@ func HashSlice(hashLikeArr any) (hashes []common.Hash) {
 	return hashes
 }
 
-// BigIntSlice parse any to []*big.Int
+// BigIntSlice parse any to []*big.Int, eg: []string to []*big.Int
 func BigIntSlice(bigLikeArr any) (bigInts []*big.Int) {
 	arrValue := reflect.ValueOf(bigLikeArr)
 	if arrValue.Kind() != reflect.Slice {
