@@ -3,6 +3,7 @@ package ethx
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"log"
 	"math/big"
@@ -83,18 +84,9 @@ func BigIntSlice(bigLikeArr any) (bigInts []*big.Int) {
 	return bigInts
 }
 
-// TypeSlice assert any to []T
-func TypeSlice[T any](arr any) []T {
-	arrValue := reflect.ValueOf(arr)
-	if arrValue.Kind() != reflect.Slice {
-		panic(errors.New(fmt.Sprintf("param is not a slice: %v", arr)))
-	}
-	n := arrValue.Len()
-	vals := make([]T, n)
-	for i := 0; i < n; i++ {
-		vals[i] = arrValue.Index(i).Interface().(T)
-	}
-	return vals
+// Type assert any to T
+func Type[T any](x any) T {
+	return abi.ConvertType(x, *new(T)).(T)
 }
 
 var (
