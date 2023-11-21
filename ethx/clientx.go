@@ -63,42 +63,32 @@ func NewClientx(rpcList []string, weights []int, defaultNotFoundBlocks uint64, l
 
 var rpcRegx, _ = regexp.Compile(`((?:https|wss|http|ws)[^\s\n\\"]+)`)
 
-// CheckRpcConn returns what rpcs are reliable and what rpcs are bad
+// CheckRpcLogged returns what rpcs are reliable for filter logs
 // example:
-//  1. rpc list: CheckRpcConn("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
-//  2. auto resolve rpc list: CheckRpcConn("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
-func CheckRpcConn(rpcLike ...string) (reliableRpcList, badRpcList []string, reliableClients []*ethclient.Client, reliableRpcMap map[*ethclient.Client]string) {
-	var (
-		err    error
-		client *ethclient.Client
-		logs   []types.Log
-		query  = ethereum.FilterQuery{
-			FromBlock: new(big.Int).SetUint64(0),
-			ToBlock:   new(big.Int).SetUint64(1000),
-		}
-	)
-	reliableRpcMap = make(map[*ethclient.Client]string)
-	log.Println("CheckRpcConn start......")
+//  1. rpc list: CheckRpcLogged("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
+//  2. auto resolve rpc list: CheckRpcLogged("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
+func CheckRpcLogged(rpcLike ...string) (reliableList []string) {
+	var query = ethereum.FilterQuery{
+		FromBlock: new(big.Int).SetUint64(0),
+		ToBlock:   new(big.Int).SetUint64(1000),
+	}
+	log.Println("CheckRpcLogged start......")
 	for _, iRpc := range rpcLike {
 		rpcList := rpcRegx.FindAllString(iRpc, -1)
 		for _, jRpc := range rpcList {
-			client, err = ethclient.Dial(jRpc)
+			client, err := ethclient.Dial(jRpc)
 			if err == nil {
-				logs, err = client.FilterLogs(context.TODO(), query)
+				logs, err := client.FilterLogs(context.TODO(), query)
 				if err == nil && len(logs) > 0 {
-					reliableRpcMap[client] = jRpc
-					reliableClients = append(reliableClients, client)
-					reliableRpcList = append(reliableRpcList, jRpc)
-					log.Println("reliable", jRpc)
+					reliableList = append(reliableList, jRpc)
 					continue
 				}
 			}
-			badRpcList = append(badRpcList, jRpc)
-			log.Println("bad", jRpc)
+			log.Println("bad: ", jRpc)
 		}
 	}
-	log.Println("CheckRpcConn finished......")
-	return
+	log.Println("CheckRpcLogged finished......")
+	return reliableList
 }
 
 // CheckRpcSpeed returns the rpc speed list
@@ -106,31 +96,25 @@ func CheckRpcConn(rpcLike ...string) (reliableRpcList, badRpcList []string, reli
 //  1. CheckRpcSpeed("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
 //  2. CheckRpcSpeed("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
 func CheckRpcSpeed(rpcLike ...string) (rpcSpeedMap map[string]time.Duration) {
-	var (
-		err         error
-		client      *ethclient.Client
-		blockNumber uint64
-		t           time.Time
-	)
 	rpcSpeedMap = make(map[string]time.Duration)
 	log.Println("CheckRpcSpeed start......")
 	for _, iRpc := range rpcLike {
 		rpcList := rpcRegx.FindAllString(iRpc, -1)
 		for _, jRpc := range rpcList {
-			client, err = ethclient.Dial(jRpc)
+			client, err := ethclient.Dial(jRpc)
 			if err == nil {
-				t = time.Now()
-				blockNumber, err = client.BlockNumber(context.TODO())
+				before := time.Now()
+				blockNumber, err := client.BlockNumber(context.TODO())
 				if err == nil && blockNumber > 0 {
-					rpcSpeedMap[jRpc] = time.Since(t)
-					log.Println(jRpc, rpcSpeedMap[jRpc])
+					rpcSpeedMap[jRpc] = time.Since(before)
+					log.Printf("[%v] %v\r\n", rpcSpeedMap[jRpc], jRpc)
 					continue
 				}
 			}
 		}
 	}
 	log.Println("CheckRpcSpeed finished......")
-	return
+	return rpcSpeedMap
 }
 
 // newClientIteratorWithWeight creates a clientIterator with wights.
