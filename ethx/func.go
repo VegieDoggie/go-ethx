@@ -13,13 +13,7 @@ func callFunc(f any, args ...any) []any {
 }
 
 func callStructFunc(structInstance any, f any, args ...any) []any {
-	var methodName string
-	switch f.(type) {
-	case string:
-		methodName = f.(string)
-	default:
-		methodName = getFuncName(f)
-	}
+	methodName := getFuncName(f)
 	funcValue := reflect.ValueOf(structInstance).MethodByName(methodName)
 	if !funcValue.IsValid() {
 		panic(errors.New(fmt.Sprintf("Method not found: %v", methodName)))
@@ -28,13 +22,17 @@ func callStructFunc(structInstance any, f any, args ...any) []any {
 }
 
 func getFuncName(f any) string {
-	funcPtr := reflect.ValueOf(f).Pointer()
-	funcName := runtime.FuncForPC(funcPtr).Name()
-	dotIndex := strings.LastIndex(funcName, ".")
-	if dotIndex != -1 {
-		funcName = strings.Split(funcName[dotIndex+1:], "-")[0]
+	var methodName string
+	switch f.(type) {
+	case string:
+		methodName = f.(string)
+	default:
+		methodName = runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
 	}
-	return funcName
+	if dotIndex := strings.LastIndex(methodName, "."); dotIndex != -1 {
+		methodName = strings.Split(methodName[dotIndex+1:], "-")[0]
+	}
+	return methodName
 }
 
 func call(funcValue reflect.Value, args ...any) []any {
