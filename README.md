@@ -42,12 +42,19 @@ func main() {
 	    <-queryTicker.C
 	}
     }()
-	// 可靠地合约接口请求(适用于读取链上合约数据)
+    // 可靠地合约接口请求(适用于读取链上合约数据)
     must := clientx.NewMust(UniswapV2Pair.NewUniswapV2Pair, "0xbe8561968ce5f9a9bf5cf6a117dfdee1b0e56d75")
-    token0 := must(new(UniswapV2Pair.UniswapV2Pair).Token0)[0].(common.Address) // same as ~ must("Token0")[0].(common.Address)
-    token1 := must(new(UniswapV2Pair.UniswapV2Pair).Token1)[0].(common.Address) // same as ~ must("Token1")[0].(common.Address)
-    domain := Type[[32]byte](must("DOMAINSEPARATOR")[0]) // 
-    log.Println(token0, token1, string(domain[:]))
+    // 方式一
+    token0 := must("Token0").(common.Address)
+    token1 := must("Token1").(common.Address)
+    reserves := ethx.Type[R](must("GetReserves"))
+    log.Println(token0, token1, reserves)
+    
+    // 方式二
+    token0 = must(UniswapV2Pair.UniswapV2Pair.Token0).(common.Address)
+    token1 = must(UniswapV2Pair.UniswapV2Pair.Token1).(common.Address)
+    reserves = ethx.Type[R](must(UniswapV2Pair.UniswapV2Pair.GetReserves))
+    log.Println(token0, token1, reserves)
     select {}
 }
 // 控制台输出
