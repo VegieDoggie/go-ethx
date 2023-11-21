@@ -30,8 +30,8 @@ func main() {
         "https://data-seed-prebsc-2-s1.binance.org:8545",
     }
     weights := []int{1, 2}
-    // 参数3: 交易默认确认块数
-    clientx := NewClientx(rpcList, weights,30)
+    // defaultNotFoundBlocks = 30 找不到的数量上限(比如传一个错误的哈希，它会在请求30次后返回结果)
+    clientx := NewClientx(rpcList, weights, 30)
 
     // auto block number test
     go func() {
