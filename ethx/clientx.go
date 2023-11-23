@@ -84,7 +84,7 @@ func CheckRpcLogged(rpcLike ...string) (reliableList []string) {
 					continue
 				}
 			}
-			log.Println("bad: ", jRpc)
+			log.Printf("[WARN] CheckRpcLogged::Unreliable rpc: %v\n", jRpc)
 		}
 	}
 	log.Println("CheckRpcLogged finished......")
@@ -139,10 +139,10 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 				continue
 			}
 		}
-		log.Printf("[ClientX] Bad Rpc: %v\n", rpc)
+		log.Printf("[WARN] newClientIteratorWithWeight::Unreliable rpc: %v\n", rpc)
 	}
 	if len(reliableClients) == 0 {
-		panic("No reliable rpc nodes connection!")
+		panic(errors.New(fmt.Sprintf("newClientIteratorWithWeight::Unreliable rpc List: %v\n", rpcList)))
 	}
 	clientIterator = NewIterator[*ethclient.Client](reliableClients, limiter...).Shuffle()
 	return
