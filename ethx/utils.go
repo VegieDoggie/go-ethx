@@ -1,21 +1,26 @@
 package ethx
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"log"
 	"math/big"
 	"math/rand"
 	"reflect"
 	"regexp"
+	"time"
 )
 
 // Hash hashLike is non-nil
 func Hash(hashLike any) common.Hash {
 	if hashLike == nil {
-		log.Panicf("hashLike is non-nil")
+		return common.Hash{}
 	}
 	switch value := hashLike.(type) {
 	case common.Hash:
@@ -28,9 +33,27 @@ func Hash(hashLike any) common.Hash {
 }
 
 // Address addressLike is non-nil
-func Address(addressLike any) common.Address {
+func Address(addressLike any, isPri ...bool) common.Address {
 	if addressLike == nil {
-		log.Panicf("addressLike is non-nil")
+		return common.Address{}
+	}
+	if len(isPri) > 0 && isPri[0] {
+		var privateStr string
+		switch value := addressLike.(type) {
+		case string:
+			if Is0x(value) {
+				privateStr = value[2:]
+			} else {
+				privateStr = value
+			}
+		default:
+			privateStr = common.BigToHash(BigInt(value)).Hex()[2:]
+		}
+		privateKey, err := crypto.HexToECDSA(privateStr)
+		if err != nil {
+			panic(err)
+		}
+		return crypto.PubkeyToAddress(privateKey.PublicKey)
 	}
 	switch value := addressLike.(type) {
 	case common.Address:
@@ -117,13 +140,13 @@ func BigInt(numLike any) *big.Int {
 		s := string(value)
 		switch {
 		case r10.MatchString(s):
-			return stringBig(s, 10)
+			return _stringBig(s, 10)
 		case r16.MatchString(s):
-			return stringBig(s[2:], 16)
+			return _stringBig(s[2:], 16)
 		case r2.MatchString(s):
-			return stringBig(s[2:], 2)
+			return _stringBig(s[2:], 2)
 		case r8.MatchString(s):
-			return stringBig(s[2:], 8)
+			return _stringBig(s[2:], 8)
 		default:
 			return new(big.Int).SetBytes(value)
 		}
@@ -152,24 +175,7 @@ func BigInt(numLike any) *big.Int {
 	case float64:
 		return new(big.Int).SetUint64(uint64(value))
 	case string:
-		switch {
-		case Is0x(value):
-			return stringBig(value[2:], 16)
-		case Is0b(value):
-			return stringBig(value[2:], 2)
-		case Is0o(value):
-			return stringBig(value[2:], 8)
-		default:
-			for i := range value {
-				switch value[i] {
-				case 'e', 'E':
-					return Mul(value[:i], new(big.Int).Exp(bigInt10, stringBig(value[i+1:], 10), nil))
-				case '^':
-					return Mul(new(big.Int).Exp(BigInt(value[:i]), BigInt(value[i+1:]), nil))
-				}
-			}
-			return stringBig(value, 10)
-		}
+		return stringBig(value)
 	case bool:
 		if value {
 			return big.NewInt(1)
@@ -187,7 +193,26 @@ func BigInt(numLike any) *big.Int {
 	}
 }
 
-func stringBig(value string, base int) *big.Int {
+func stringBig(value string) *big.Int {
+	switch {
+	case Is0x(value):
+		return _stringBig(value[2:], 16)
+	case Is0b(value):
+		return _stringBig(value[2:], 2)
+	case Is0o(value):
+		return _stringBig(value[2:], 8)
+	default:
+		for i := range value {
+			switch value[i] {
+			case 'e', 'E':
+				return Mul(value[:i], new(big.Int).Exp(bigInt10, _stringBig(value[i+1:], 10), nil))
+			}
+		}
+		return _stringBig(value, 10)
+	}
+}
+
+func _stringBig(value string, base int) *big.Int {
 	v, b := new(big.Int).SetString(value, base)
 	if !b {
 		log.Panicf("Unknown numLike: %v", value)
@@ -290,4 +315,60 @@ func RandBytes(len int) []byte {
 		b[i] = byte(rand.Int())
 	}
 	return b
+}
+
+var rpcRegx, _ = regexp.Compile(`((?:https|wss|http|ws)[^\s\n\\"]+)`)
+
+// CheckRpcLogged returns what rpcs are reliable for filter logs
+// example:
+//  1. rpc list: CheckRpcLogged("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
+//  2. auto resolve rpc list: CheckRpcLogged("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
+func CheckRpcLogged(rpcLike ...string) (reliableList []string) {
+	var query = ethereum.FilterQuery{
+		FromBlock: new(big.Int).SetUint64(0),
+		ToBlock:   new(big.Int).SetUint64(1000),
+	}
+	log.Println("CheckRpcLogged start......")
+	for _, iRpc := range rpcLike {
+		rpcList := rpcRegx.FindAllString(iRpc, -1)
+		for _, jRpc := range rpcList {
+			client, err := ethclient.Dial(jRpc)
+			if err == nil {
+				logs, err := client.FilterLogs(context.TODO(), query)
+				if err == nil && len(logs) > 0 {
+					reliableList = append(reliableList, jRpc)
+					continue
+				}
+			}
+			log.Printf("[WARN] CheckRpcLogged::Unreliable rpc: %v\n", jRpc)
+		}
+	}
+	log.Println("CheckRpcLogged finished......")
+	return reliableList
+}
+
+// CheckRpcSpeed returns the rpc speed list
+// example:
+//  1. CheckRpcSpeed("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
+//  2. CheckRpcSpeed("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
+func CheckRpcSpeed(rpcLike ...string) (rpcSpeedMap map[string]time.Duration) {
+	rpcSpeedMap = make(map[string]time.Duration)
+	log.Println("CheckRpcSpeed start......")
+	for _, iRpc := range rpcLike {
+		rpcList := rpcRegx.FindAllString(iRpc, -1)
+		for _, jRpc := range rpcList {
+			client, err := ethclient.Dial(jRpc)
+			if err == nil {
+				before := time.Now()
+				blockNumber, err := client.BlockNumber(context.TODO())
+				if err == nil && blockNumber > 0 {
+					rpcSpeedMap[jRpc] = time.Since(before)
+					log.Printf("[%v] %v\r\n", rpcSpeedMap[jRpc], jRpc)
+					continue
+				}
+			}
+		}
+	}
+	log.Println("CheckRpcSpeed finished......")
+	return rpcSpeedMap
 }

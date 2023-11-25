@@ -13,7 +13,6 @@ import (
 	"log"
 	"math"
 	"math/big"
-	"regexp"
 	"sync"
 	"time"
 )
@@ -21,11 +20,12 @@ import (
 // Clientx defines typed wrappers for the Ethereum RPC API of a set of the Ethereum Clients.
 type Clientx struct {
 	*Iterator[*ethclient.Client]
-	ctx             context.Context
-	RpcMap          map[*ethclient.Client]string
-	rpcErrCountMap  map[*ethclient.Client]uint
-	NotFoundBlocks  uint64
-	AutoBlockNumber uint64
+	ctx            context.Context
+	RpcMap         map[*ethclient.Client]string
+	rpcErrCountMap map[*ethclient.Client]uint
+	NotFoundBlocks uint64
+	chainId        *big.Int
+	latestHeader   *types.Header
 }
 
 // NewClientx connects clients to the given URLs, to provide a reliable Ethereum RPC API call, includes
@@ -33,92 +33,37 @@ type Clientx struct {
 // If weight <= 1, the weight is always 1.
 // Note: If len(weightList) == 0, then default weight = 1 will be active.
 func NewClientx(rpcList []string, weights []int, defaultNotFoundBlocks uint64, limiter ...*rate.Limiter) *Clientx {
-	iterator, rpcMap := newClientIteratorWithWeight(rpcList, weights, limiter...)
+	iterator, rpcMap, chainId := newClientIteratorWithWeight(rpcList, weights, limiter...)
 	c := &Clientx{
-		ctx:             context.Background(),
-		Iterator:        iterator,
-		RpcMap:          rpcMap,
-		rpcErrCountMap:  make(map[*ethclient.Client]uint),
-		NotFoundBlocks:  defaultNotFoundBlocks,
-		AutoBlockNumber: 0,
+		ctx:            context.Background(),
+		Iterator:       iterator,
+		RpcMap:         rpcMap,
+		chainId:        chainId,
+		rpcErrCountMap: make(map[*ethclient.Client]uint),
+		NotFoundBlocks: defaultNotFoundBlocks,
+		latestHeader:   &types.Header{Number: BigInt(0)},
 	}
 	go func() {
 		queryTicker := time.NewTicker(time.Second)
 		defer queryTicker.Stop()
 		for {
-			blockNumber := c.BlockNumber()
-			if blockNumber > c.AutoBlockNumber {
-				c.AutoBlockNumber = blockNumber
+			header, err := c.HeaderByNumber(nil, 0)
+			if err == nil && header.Number.Cmp(c.latestHeader.Number) > 1 {
+				c.latestHeader = header
 			}
 			<-queryTicker.C
 		}
 	}()
 	queryTicker := time.NewTicker(100 * time.Millisecond)
 	defer queryTicker.Stop()
-	for c.AutoBlockNumber == 0 {
+	for c.latestHeader.Number.Uint64() == 0 {
 		<-queryTicker.C
 	}
 	return c
 }
 
-var rpcRegx, _ = regexp.Compile(`((?:https|wss|http|ws)[^\s\n\\"]+)`)
-
-// CheckRpcLogged returns what rpcs are reliable for filter logs
-// example:
-//  1. rpc list: CheckRpcLogged("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
-//  2. auto resolve rpc list: CheckRpcLogged("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
-func CheckRpcLogged(rpcLike ...string) (reliableList []string) {
-	var query = ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetUint64(0),
-		ToBlock:   new(big.Int).SetUint64(1000),
-	}
-	log.Println("CheckRpcLogged start......")
-	for _, iRpc := range rpcLike {
-		rpcList := rpcRegx.FindAllString(iRpc, -1)
-		for _, jRpc := range rpcList {
-			client, err := ethclient.Dial(jRpc)
-			if err == nil {
-				logs, err := client.FilterLogs(context.TODO(), query)
-				if err == nil && len(logs) > 0 {
-					reliableList = append(reliableList, jRpc)
-					continue
-				}
-			}
-			log.Printf("[WARN] CheckRpcLogged::Unreliable rpc: %v\n", jRpc)
-		}
-	}
-	log.Println("CheckRpcLogged finished......")
-	return reliableList
-}
-
-// CheckRpcSpeed returns the rpc speed list
-// example:
-//  1. CheckRpcSpeed("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
-//  2. CheckRpcSpeed("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
-func CheckRpcSpeed(rpcLike ...string) (rpcSpeedMap map[string]time.Duration) {
-	rpcSpeedMap = make(map[string]time.Duration)
-	log.Println("CheckRpcSpeed start......")
-	for _, iRpc := range rpcLike {
-		rpcList := rpcRegx.FindAllString(iRpc, -1)
-		for _, jRpc := range rpcList {
-			client, err := ethclient.Dial(jRpc)
-			if err == nil {
-				before := time.Now()
-				blockNumber, err := client.BlockNumber(context.TODO())
-				if err == nil && blockNumber > 0 {
-					rpcSpeedMap[jRpc] = time.Since(before)
-					log.Printf("[%v] %v\r\n", rpcSpeedMap[jRpc], jRpc)
-					continue
-				}
-			}
-		}
-	}
-	log.Println("CheckRpcSpeed finished......")
-	return rpcSpeedMap
-}
-
 // newClientIteratorWithWeight creates a clientIterator with wights.
-func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...*rate.Limiter) (clientIterator *Iterator[*ethclient.Client], rpcMap map[*ethclient.Client]string) {
+func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...*rate.Limiter) (clientIterator *Iterator[*ethclient.Client], rpcMap map[*ethclient.Client]string, latestChainId *big.Int) {
 	if len(rpcList) != len(weightList) {
 		tmp := weightList
 		weightList = make([]int, len(rpcList))
@@ -129,8 +74,13 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 	for i, rpc := range rpcList {
 		client, err := ethclient.Dial(rpc)
 		if err == nil {
-			blockNumber, err := client.BlockNumber(context.TODO())
-			if err == nil && blockNumber > 0 {
+			chainId, err := client.ChainID(context.TODO())
+			if err == nil {
+				if latestChainId != nil {
+					latestChainId = chainId
+				} else if latestChainId.Cmp(chainId) != 0 {
+					panic(errors.New(fmt.Sprintf("[ERROR] rpc(%v) chainID is %v,but rpc(%v) chainId is %v\n", rpcList[i-1], latestChainId, rpc, chainId)))
+				}
 				for j := 1; j < weightList[i]; j++ {
 					reliableClients = append(reliableClients, client)
 				}
@@ -142,7 +92,7 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 		log.Printf("[WARN] newClientIteratorWithWeight::Unreliable rpc: %v\n", rpc)
 	}
 	if len(reliableClients) == 0 {
-		panic(errors.New(fmt.Sprintf("newClientIteratorWithWeight::Unreliable rpc List: %v\n", rpcList)))
+		panic(errors.New(fmt.Sprintf("[ERROR] newClientIteratorWithWeight::Unreliable rpc List: %v\n", rpcList)))
 	}
 	clientIterator = NewIterator[*ethclient.Client](reliableClients, limiter...).Shuffle()
 	return
@@ -187,30 +137,12 @@ func (c *Clientx) Close() {
 
 // BlockNumber returns the most recent block number
 func (c *Clientx) BlockNumber() (blockNumber uint64) {
-	var err error
-	for {
-		client := c.WaitNext()
-		blockNumber, err = client.BlockNumber(c.ctx)
-		if err != nil || blockNumber == 0 {
-			c.logWarn(client.BlockNumber, client, err)
-			continue
-		}
-		return
-	}
+	return c.latestHeader.Number.Uint64()
 }
 
 // ChainID retrieves the current chain ID for transaction replay protection.
 func (c *Clientx) ChainID() (chainID *big.Int) {
-	var err error
-	for {
-		client := c.WaitNext()
-		chainID, err = client.ChainID(c.ctx)
-		if err != nil {
-			c.logWarn(client.ChainID, client, err)
-			continue
-		}
-		return
-	}
+	return c.chainId
 }
 
 // NetworkID returns the network ID.
@@ -414,12 +346,12 @@ func (c *Clientx) PendingCodeAt(account any) (code []byte) {
 	}
 }
 
-// notFoundStopBlockNumber returns the stop blockNumber for the notFound-error.
-func (c *Clientx) notFoundStopBlockNumber(notFoundBlocks ...uint64) uint64 {
+// notFoundReturn returns the stop blockNumber for the notFound-error.
+func (c *Clientx) notFoundReturn(notFoundBlocks ...uint64) uint64 {
 	if len(notFoundBlocks) > 0 {
-		return c.AutoBlockNumber + notFoundBlocks[0]
+		return c.BlockNumber() + notFoundBlocks[0]
 	}
-	return c.AutoBlockNumber + c.NotFoundBlocks
+	return c.BlockNumber() + c.NotFoundBlocks
 }
 
 // BlockByHash returns the given full block.
@@ -430,24 +362,21 @@ func (c *Clientx) BlockByHash(hash any, notFoundBlocks ...uint64) (block *types.
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_hash := Hash(hash)
-	var notFoundStopBlockNumber uint64
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		block, err = client.BlockByHash(c.ctx, _hash)
 		if err != nil {
 			c.logWarn(client.BlockByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return nil, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return block, nil
 	}
 }
 
@@ -460,24 +389,21 @@ func (c *Clientx) BlockByNumber(blockNumber any, notFoundBlocks ...uint64) (bloc
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_blockNumber := BigInt(blockNumber)
-	var notFoundStopBlockNumber uint64
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		block, err = client.BlockByNumber(c.ctx, _blockNumber)
 		if err != nil {
 			c.logWarn(client.BlockByNumber, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return nil, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return block, nil
 	}
 }
 
@@ -486,24 +412,21 @@ func (c *Clientx) HeaderByHash(hash any, notFoundBlocks ...uint64) (header *type
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_hash := Hash(hash)
-	var notFoundStopBlockNumber uint64
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		header, err = client.HeaderByHash(c.ctx, _hash)
 		if err != nil {
 			c.logWarn(client.HeaderByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return nil, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return header, nil
 	}
 }
 
@@ -513,24 +436,21 @@ func (c *Clientx) HeaderByNumber(blockNumber any, notFoundBlocks ...uint64) (hea
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_blockNumber := BigInt(blockNumber)
-	var notFoundStopBlockNumber uint64
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		header, err = client.HeaderByNumber(c.ctx, _blockNumber)
 		if err != nil {
 			c.logWarn(client.HeaderByNumber, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return nil, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return header, nil
 	}
 }
 
@@ -539,24 +459,21 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_hash := Hash(hash)
-	var notFoundStopBlockNumber uint64
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		tx, isPending, err = client.TransactionByHash(c.ctx, _hash)
 		if err != nil {
 			c.logWarn(client.TransactionByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return nil, isPending, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return tx, isPending, nil
 	}
 }
 
@@ -569,25 +486,22 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 func (c *Clientx) TransactionSender(tx *types.Transaction, blockHash any, index uint, notFoundBlocks ...uint64) (sender common.Address, err error) {
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
-	var notFoundStopBlockNumber uint64
 	_blockHash := Hash(blockHash)
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		sender, err = client.TransactionSender(c.ctx, tx, _blockHash, index)
 		if err != nil {
 			c.logWarn(client.TransactionSender, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return sender, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return sender, err
 	}
 }
 
@@ -596,24 +510,21 @@ func (c *Clientx) TransactionCount(blockHash any, notFoundBlocks ...uint64) (cou
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_blockHash := Hash(blockHash)
-	var notFoundStopBlockNumber uint64
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		count, err = client.TransactionCount(c.ctx, _blockHash)
 		if err != nil {
 			c.logWarn(client.TransactionCount, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return count, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return count, nil
 	}
 }
 
@@ -636,24 +547,21 @@ func (c *Clientx) TransactionInBlock(blockHash any, index uint, notFoundBlocks .
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_blockHash := Hash(blockHash)
-	var notFoundStopBlockNumber uint64
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		tx, err = client.TransactionInBlock(c.ctx, _blockHash, index)
 		if err != nil {
 			c.logWarn(client.TransactionInBlock, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return tx, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return tx, err
 	}
 }
 
@@ -663,24 +571,21 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_txHash := Hash(txHash)
-	var notFoundStopBlockNumber uint64
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		receipt, err = client.TransactionReceipt(c.ctx, _txHash)
 		if err != nil {
 			c.logWarn(client.TransactionReceipt, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return
+				if _notFoundReturn >= c.BlockNumber() {
+					return receipt, err
 				}
 				<-queryTicker.C
 			}
 			continue
 		}
-		return
+		return receipt, err
 	}
 }
 
@@ -691,25 +596,20 @@ func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoun
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	txHash := tx.Hash()
-	var confirmStopBlockNumber, notFoundStopBlockNumber uint64
+	_confirmReturn := c.BlockNumber() + confirmBlocks
+	_notFoundReturn := c.notFoundReturn(notFoundBlocks...)
 	for {
 		client := c.WaitNext()
 		receipt, err := client.TransactionReceipt(c.ctx, txHash)
 		if err != nil {
 			c.logWarn(c.WaitMined, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if notFoundStopBlockNumber == 0 {
-					notFoundStopBlockNumber = c.notFoundStopBlockNumber(notFoundBlocks...)
-				}
-				if notFoundStopBlockNumber >= c.AutoBlockNumber {
-					return nil, err
+				if _notFoundReturn >= c.BlockNumber() {
+					return receipt, err
 				}
 			}
 		} else {
-			if confirmStopBlockNumber == 0 {
-				confirmStopBlockNumber = c.AutoBlockNumber + confirmBlocks
-			}
-			if confirmStopBlockNumber >= c.AutoBlockNumber {
+			if _confirmReturn >= c.BlockNumber() {
 				return receipt, nil
 			}
 		}
