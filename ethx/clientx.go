@@ -28,6 +28,22 @@ type Clientx struct {
 	NotFoundBlocks uint64
 	chainId        *big.Int
 	latestHeader   *types.Header
+	stop           chan bool
+}
+
+// NewSimpleClientx create *Clientx
+// concurrency is the concurrency per seconds of any rpc, default 1/s
+// see NewClientx
+func NewSimpleClientx(rpcList []string, concurrency ...int) *Clientx {
+	_concurrency := 1
+	if len(concurrency) > 0 && concurrency[0] > 1 {
+		_concurrency = concurrency[0]
+	}
+	var weights []int
+	for range rpcList {
+		weights = append(weights, _concurrency)
+	}
+	return NewClientx(rpcList, weights, 12)
 }
 
 // NewClientx connects clients to the given URLs, to provide a reliable Ethereum RPC API call, includes
@@ -44,16 +60,21 @@ func NewClientx(rpcList []string, weights []int, defaultNotFoundBlocks uint64, l
 		rpcErrCountMap: make(map[*ethclient.Client]uint),
 		NotFoundBlocks: defaultNotFoundBlocks,
 		latestHeader:   &types.Header{Number: BigInt(0)},
+		stop:           make(chan bool),
 	}
 	go func() {
 		queryTicker := time.NewTicker(time.Second)
 		defer queryTicker.Stop()
 		for {
 			header, err := c.HeaderByNumber(nil, 0)
-			if err == nil && header.Number.Cmp(c.latestHeader.Number) > 1 {
+			if err == nil && header.Number.Cmp(c.latestHeader.Number) == 1 {
 				c.latestHeader = header
 			}
-			<-queryTicker.C
+			select {
+			case <-c.stop:
+				return
+			case <-queryTicker.C:
+			}
 		}
 	}()
 	queryTicker := time.NewTicker(100 * time.Millisecond)
@@ -78,7 +99,7 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 		if err == nil {
 			chainId, err := client.ChainID(context.TODO())
 			if err == nil {
-				if latestChainId != nil {
+				if latestChainId == nil {
 					latestChainId = chainId
 				} else if latestChainId.Cmp(chainId) != 0 {
 					panic(errors.New(fmt.Sprintf("[ERROR] rpc(%v) chainID is %v,but rpc(%v) chainId is %v\n", rpcList[i-1], latestChainId, rpc, chainId)))
@@ -97,7 +118,7 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 		panic(errors.New(fmt.Sprintf("[ERROR] newClientIteratorWithWeight::Unreliable rpc List: %v\n", rpcList)))
 	}
 	clientIterator = NewIterator[*ethclient.Client](reliableClients, limiter...).Shuffle()
-	return
+	return clientIterator, rpcMap, latestChainId
 }
 
 func (c *Clientx) logWarn(f any, client *ethclient.Client, err error) {
@@ -212,15 +233,15 @@ func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOp
 	if err != nil {
 		return nil, nil, err
 	}
-	msg := Type[ethereum.CallMsg](tx)
-	gasLimit, err := c.EstimateGas(msg, 3)
+	from := Address(_privateKey, true)
+	gasLimit, err := c.EstimateGas(CallMsg(tx, from), 3)
 	if err != nil {
 		return nil, nil, err
 	}
 	if opts.GasLimit < gasLimit || gasLimit == 0 {
 		return tx, nil, errors.New(fmt.Sprintf("[ERROR] Transfer::Gas required %v, but %v.\n", gasLimit, opts.GasLimit))
 	}
-	err = c.SendTransaction(tx, 3)
+	err = c.SendTransaction(tx, 5)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -233,6 +254,7 @@ func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOp
 
 // Close all clients connections.
 func (c *Clientx) Close() {
+	c.stop <- true
 	clients := c.Iterator.All()
 	for i := range clients {
 		clients[i].Close()
@@ -476,7 +498,11 @@ func (c *Clientx) BlockByHash(hash any, notFoundBlocks ...uint64) (block *types.
 				if _notFoundReturn >= c.BlockNumber() {
 					return nil, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return nil, errors.New("BlockByHash::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -503,7 +529,11 @@ func (c *Clientx) BlockByNumber(blockNumber any, notFoundBlocks ...uint64) (bloc
 				if _notFoundReturn >= c.BlockNumber() {
 					return nil, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return nil, errors.New("BlockByNumber::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -526,7 +556,11 @@ func (c *Clientx) HeaderByHash(hash any, notFoundBlocks ...uint64) (header *type
 				if _notFoundReturn >= c.BlockNumber() {
 					return nil, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return nil, errors.New("HeaderByHash::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -550,7 +584,11 @@ func (c *Clientx) HeaderByNumber(blockNumber any, notFoundBlocks ...uint64) (hea
 				if _notFoundReturn >= c.BlockNumber() {
 					return nil, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return nil, errors.New("HeaderByNumber::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -573,7 +611,11 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 				if _notFoundReturn >= c.BlockNumber() {
 					return nil, isPending, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return nil, false, errors.New("TransactionByHash::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -601,7 +643,11 @@ func (c *Clientx) TransactionSender(tx *types.Transaction, blockHash any, index 
 				if _notFoundReturn >= c.BlockNumber() {
 					return sender, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return sender, errors.New("TransactionSender::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -622,6 +668,7 @@ func (c *Clientx) EstimateGas(msg ethereum.CallMsg, maxTry ...int) (gasLimit uin
 			c.logWarn(client.EstimateGas, client, err)
 			continue
 		}
+		break
 	}
 	return gasLimit, err
 }
@@ -639,6 +686,7 @@ func (c *Clientx) SendTransaction(tx *types.Transaction, maxTry ...int) (err err
 			c.logWarn(client.SendTransaction, client, err)
 			continue
 		}
+		break
 	}
 	return err
 }
@@ -658,7 +706,11 @@ func (c *Clientx) TransactionCount(blockHash any, notFoundBlocks ...uint64) (cou
 				if _notFoundReturn >= c.BlockNumber() {
 					return count, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return 0, errors.New("TransactionCount::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -695,7 +747,11 @@ func (c *Clientx) TransactionInBlock(blockHash any, index uint, notFoundBlocks .
 				if _notFoundReturn >= c.BlockNumber() {
 					return tx, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return nil, errors.New("TransactionInBlock::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -719,7 +775,11 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 				if _notFoundReturn >= c.BlockNumber() {
 					return receipt, err
 				}
-				<-queryTicker.C
+			}
+			select {
+			case <-c.stop:
+				return nil, errors.New("TransactionReceipt::stopped!\n")
+			case <-queryTicker.C:
 			}
 			continue
 		}
@@ -743,7 +803,7 @@ func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoun
 			c.logWarn(c.WaitMined, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn >= c.BlockNumber() {
-					return receipt, err
+					return nil, err
 				}
 			}
 		} else {
@@ -751,7 +811,11 @@ func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoun
 				return receipt, nil
 			}
 		}
-		<-queryTicker.C
+		select {
+		case <-c.stop:
+			return nil, errors.New("WaitMined::stopped!\n")
+		case <-queryTicker.C:
+		}
 	}
 }
 

@@ -5,9 +5,11 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"log"
@@ -15,6 +17,7 @@ import (
 	"math/rand"
 	"reflect"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -23,14 +26,7 @@ func Hash(hashLike any) common.Hash {
 	if hashLike == nil {
 		return common.Hash{}
 	}
-	switch value := hashLike.(type) {
-	case common.Hash:
-		return value
-	case *common.Hash:
-		return *value
-	default:
-		return common.BigToHash(BigInt(hashLike))
-	}
+	return common.BigToHash(BigInt(hashLike))
 }
 
 // Address addressLike is non-nil
@@ -41,14 +37,7 @@ func Address(addressLike any, isPri ...bool) common.Address {
 	if len(isPri) > 0 && isPri[0] {
 		return crypto.PubkeyToAddress(PrivateKey(addressLike).PublicKey)
 	}
-	switch value := addressLike.(type) {
-	case common.Address:
-		return value
-	case *common.Address:
-		return *value
-	default:
-		return common.BigToAddress(BigInt(addressLike))
-	}
+	return common.BigToAddress(BigInt(addressLike))
 }
 
 // AddressSlice parse any to []common.Address, eg: []string to []common.Address
@@ -114,13 +103,13 @@ func BigInt(numLike any) *big.Int {
 	switch value := numLike.(type) {
 	case *big.Int:
 		return value
-	case *common.Address:
-		return value.Big()
 	case common.Address:
 		return value.Big()
-	case *common.Hash:
-		return value.Big()
 	case common.Hash:
+		return value.Big()
+	case *common.Address:
+		return value.Big()
+	case *common.Hash:
 		return value.Big()
 	case []byte:
 		s := string(value)
@@ -220,16 +209,22 @@ func Add(numLike ...any) *big.Int {
 
 func Sub(numBase any, numLike ...any) *big.Int {
 	num := BigInt(numBase)
-	for i := range numLike {
-		num.Sub(num, BigInt(numLike[i]))
-	}
+	num.Sub(num, Sum(numLike...))
 	return num
 }
 
 func Mul(numLike ...any) *big.Int {
 	num := big.NewInt(1)
 	for i := range numLike {
-		num.Mul(num, BigInt(numLike[i]))
+		arrValue := reflect.ValueOf(numLike[i])
+		if arrValue.Kind() == reflect.Slice {
+			n := arrValue.Len()
+			for j := 0; j < n; j++ {
+				num.Mul(num, BigInt(arrValue.Index(j).Interface()))
+			}
+		} else {
+			num.Mul(num, BigInt(numLike[i]))
+		}
 	}
 	return num
 }
@@ -246,7 +241,15 @@ func MulDiv(numLike0, numLike1, numLike2 any) *big.Int {
 func Sum(numLike ...any) *big.Int {
 	num := new(big.Int)
 	for i := range numLike {
-		num.Add(num, BigInt(numLike[i]))
+		arrValue := reflect.ValueOf(numLike[i])
+		if arrValue.Kind() == reflect.Slice {
+			n := arrValue.Len()
+			for j := 0; j < n; j++ {
+				num.Add(num, BigInt(arrValue.Index(j).Interface()))
+			}
+		} else {
+			num.Add(num, BigInt(numLike[i]))
+		}
 	}
 	return num
 }
@@ -309,73 +312,137 @@ var rpcRegx, _ = regexp.Compile(`((?:https|wss|http|ws)[^\s\n\\"]+)`)
 // example:
 //  1. rpc list: CheckRpcLogged("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
 //  2. auto resolve rpc list: CheckRpcLogged("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
-func CheckRpcLogged(rpcLike ...string) (reliableList []string) {
+func CheckRpcLogged(rpcLike ...string) (reliableList []string, rpcSpeedMap map[string]time.Duration) {
 	var query = ethereum.FilterQuery{
 		FromBlock: new(big.Int).SetUint64(0),
 		ToBlock:   new(big.Int).SetUint64(1000),
 	}
+	rpcSpeedMap = make(map[string]time.Duration)
 	log.Println("CheckRpcLogged start......")
-	for _, iRpc := range rpcLike {
-		rpcList := rpcRegx.FindAllString(iRpc, -1)
-		for _, jRpc := range rpcList {
-			client, err := ethclient.Dial(jRpc)
-			if err == nil {
-				logs, err := client.FilterLogs(context.TODO(), query)
-				if err == nil && len(logs) > 0 {
-					reliableList = append(reliableList, jRpc)
-					continue
-				}
+	rpcList := resolveRPCs(rpcLike...)
+	var errInfo string
+	for _, rpc := range rpcList {
+		client, err := ethclient.Dial(rpc)
+		if err == nil {
+			before := time.Now()
+			logs, err := client.FilterLogs(context.TODO(), query)
+			if err == nil && len(logs) > 0 {
+				rpcSpeedMap[rpc] = time.Since(before)
+				reliableList = append(reliableList, rpc)
+				log.Printf("[%v] %v\r\n", rpcSpeedMap[rpc], rpc)
+				continue
 			}
-			log.Printf("[WARN] CheckRpcLogged::Unreliable rpc: %v\n", jRpc)
 		}
+		errInfo += rpc
+	}
+	if len(errInfo) > 0 {
+		log.Printf("[WARN] CheckRpcLogged::Unreliable: %v\n", errInfo[:len(errInfo)-2])
+	}
+	if len(reliableList) > 0 {
+		for i := range reliableList {
+			reliableList[i] = fmt.Sprintf("\"%v\"", reliableList[i])
+		}
+		log.Printf("[GOOD] CheckRpcSpeed::Reliable: [%v]\n", strings.Join(reliableList, ", "))
 	}
 	log.Println("CheckRpcLogged finished......")
-	return reliableList
+	return reliableList, rpcSpeedMap
 }
 
 // CheckRpcSpeed returns the rpc speed list
 // example:
 //  1. CheckRpcSpeed("https://bsc-dataseed1.defibit.io", "https://bsc-dataseed4.binance.org")
 //  2. CheckRpcSpeed("https://bsc-dataseed1.defibit.io\t29599361\t1.263s\t\t\nConnect Wallet\nhttps://bsc-dataseed4.binance.org")
-func CheckRpcSpeed(rpcLike ...string) (rpcSpeedMap map[string]time.Duration) {
+func CheckRpcSpeed(rpcLike ...string) (reliableList []string, rpcSpeedMap map[string]time.Duration) {
 	rpcSpeedMap = make(map[string]time.Duration)
 	log.Println("CheckRpcSpeed start......")
-	for _, iRpc := range rpcLike {
-		rpcList := rpcRegx.FindAllString(iRpc, -1)
-		for _, jRpc := range rpcList {
-			client, err := ethclient.Dial(jRpc)
-			if err == nil {
-				before := time.Now()
-				blockNumber, err := client.BlockNumber(context.TODO())
-				if err == nil && blockNumber > 0 {
-					rpcSpeedMap[jRpc] = time.Since(before)
-					log.Printf("[%v] %v\r\n", rpcSpeedMap[jRpc], jRpc)
-					continue
-				}
+	rpcList := resolveRPCs(rpcLike...)
+	var errInfo string
+	for _, rpc := range rpcList {
+		client, err := ethclient.Dial(rpc)
+		if err == nil {
+			before := time.Now()
+			blockNumber, err := client.BlockNumber(context.TODO())
+			if err == nil && blockNumber > 0 {
+				rpcSpeedMap[rpc] = time.Since(before)
+				log.Printf("[%v] %v\r\n", rpcSpeedMap[rpc], rpc)
+				reliableList = append(reliableList, rpc)
+				continue
 			}
 		}
+		errInfo += rpc + ", "
+	}
+	if len(errInfo) > 0 {
+		log.Printf("[WARN] CheckRpcSpeed::Unreliable: %v\n", errInfo[:len(errInfo)-2])
+	}
+	if len(reliableList) > 0 {
+		for i := range reliableList {
+			reliableList[i] = fmt.Sprintf("\"%v\"", reliableList[i])
+		}
+		log.Printf("[GOOD] CheckRpcSpeed::Reliable: [%v]\n", strings.Join(reliableList, ", "))
 	}
 	log.Println("CheckRpcSpeed finished......")
-	return rpcSpeedMap
+	return reliableList, rpcSpeedMap
+}
+
+func resolveRPCs(rpcLike ...string) (rpcList []string) {
+	for _, iRpc := range rpcLike {
+		_rpcList := rpcRegx.FindAllString(iRpc, -1)
+		rpcList = append(rpcList, _rpcList...)
+	}
+	return mapset.NewSet[string](rpcList...).ToSlice()
 }
 
 func PrivateKey(priLike any) *ecdsa.PrivateKey {
-	var privateStr string
 	switch value := priLike.(type) {
 	case *ecdsa.PrivateKey:
 		return value
-	case string:
-		if Is0x(value) {
-			privateStr = value[2:]
-		} else {
-			privateStr = value
-		}
-	default:
-		privateStr = common.BigToHash(BigInt(value)).Hex()[2:]
+	}
+	var privateStr string
+	if value, ok := priLike.(string); ok && len(value) == 64 && !Is0x(value) {
+		privateStr = value
+	} else {
+		privateStr = common.BigToHash(BigInt(priLike)).Hex()[2:]
 	}
 	privateKey, err := crypto.HexToECDSA(privateStr)
 	if err != nil {
 		panic(err)
 	}
 	return privateKey
+}
+
+// CallMsg create ethereum.CallMsg from *types.Transaction
+func CallMsg(tx *types.Transaction, fromAddress ...any) (callMsg ethereum.CallMsg) {
+	switch tx.Type() {
+	case types.AccessListTxType:
+		callMsg = ethereum.CallMsg{
+			To:         tx.To(),
+			Gas:        tx.Gas(),
+			GasPrice:   tx.GasPrice(),
+			Value:      tx.Value(),
+			Data:       tx.Data(),
+			AccessList: tx.AccessList(),
+		}
+	case types.DynamicFeeTxType, types.BlobTxType:
+		callMsg = ethereum.CallMsg{
+			To:         tx.To(),
+			Gas:        tx.Gas(),
+			GasFeeCap:  tx.GasFeeCap(),
+			GasTipCap:  tx.GasTipCap(),
+			Value:      tx.Value(),
+			Data:       tx.Data(),
+			AccessList: tx.AccessList(),
+		}
+	default: // types.LegacyTxType
+		callMsg = ethereum.CallMsg{
+			To:       tx.To(),
+			Gas:      tx.Gas(),
+			GasPrice: tx.GasPrice(),
+			Value:    tx.Value(),
+			Data:     tx.Data(),
+		}
+	}
+	if len(fromAddress) > 0 {
+		callMsg.From = Address(fromAddress[0])
+	}
+	return callMsg
 }
