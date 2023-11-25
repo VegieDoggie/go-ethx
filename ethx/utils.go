@@ -2,6 +2,7 @@ package ethx
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum"
@@ -38,22 +39,7 @@ func Address(addressLike any, isPri ...bool) common.Address {
 		return common.Address{}
 	}
 	if len(isPri) > 0 && isPri[0] {
-		var privateStr string
-		switch value := addressLike.(type) {
-		case string:
-			if Is0x(value) {
-				privateStr = value[2:]
-			} else {
-				privateStr = value
-			}
-		default:
-			privateStr = common.BigToHash(BigInt(value)).Hex()[2:]
-		}
-		privateKey, err := crypto.HexToECDSA(privateStr)
-		if err != nil {
-			panic(err)
-		}
-		return crypto.PubkeyToAddress(privateKey.PublicKey)
+		return crypto.PubkeyToAddress(PrivateKey(addressLike).PublicKey)
 	}
 	switch value := addressLike.(type) {
 	case common.Address:
@@ -371,4 +357,25 @@ func CheckRpcSpeed(rpcLike ...string) (rpcSpeedMap map[string]time.Duration) {
 	}
 	log.Println("CheckRpcSpeed finished......")
 	return rpcSpeedMap
+}
+
+func PrivateKey(priLike any) *ecdsa.PrivateKey {
+	var privateStr string
+	switch value := priLike.(type) {
+	case *ecdsa.PrivateKey:
+		return value
+	case string:
+		if Is0x(value) {
+			privateStr = value[2:]
+		} else {
+			privateStr = value
+		}
+	default:
+		privateStr = common.BigToHash(BigInt(value)).Hex()[2:]
+	}
+	privateKey, err := crypto.HexToECDSA(privateStr)
+	if err != nil {
+		panic(err)
+	}
+	return privateKey
 }

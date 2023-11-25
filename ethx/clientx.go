@@ -6,8 +6,10 @@ import (
 	"fmt"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"golang.org/x/time/rate"
 	"log"
@@ -125,6 +127,108 @@ func (c *Clientx) NewMust(constructor any, addressLike any, maxErrNum ...int) fu
 		}
 		panic(errors.New(fmt.Sprintf("%v [%v]: exceed maxErrNum(%v)", address, getFuncName(f), n)))
 	}
+}
+
+// TransactOpts create *bind.TransactOpts, and panic if privateKey err
+// privateKeyLike eg: 0xf1...3, f1...3, []byte, *ecdsa.PrivateKey...
+func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
+	_privateKey := PrivateKey(privateKeyLike)
+	opts, err := bind.NewKeyedTransactorWithChainID(_privateKey, c.chainId)
+	if err != nil {
+		panic(err)
+	}
+	if c.latestHeader.BaseFee != nil {
+		gasTipCap := c.SuggestGasTipCap()
+		opts.GasFeeCap = Add(Mul(c.latestHeader.BaseFee, 2), gasTipCap)
+		opts.GasTipCap = gasTipCap
+	} else {
+		opts.GasPrice = c.SuggestGasPrice()
+	}
+	opts.GasLimit = 8000000
+	opts.Nonce = BigInt(c.PendingNonceAt(crypto.PubkeyToAddress(_privateKey.PublicKey)))
+	return opts
+}
+
+type TransferOption struct {
+	data       []byte             // option
+	AccessList types.AccessList   // option
+	Opts       *bind.TransactOpts // option
+}
+
+// Transfer build transaction and send
+// TransferOption is optional.
+// see more: github.com/ethereum/go-ethereum/internal/ethapi/transaction_args.go:284
+func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOption) (tx *types.Transaction, receipt *types.Receipt, err error) {
+	_privateKey := PrivateKey(privateKeyLike)
+	var data []byte
+	var accessList types.AccessList
+	var opts *bind.TransactOpts
+	if len(options) > 0 {
+		data = options[0].data
+		accessList = options[0].AccessList
+		opts = options[0].Opts
+	}
+	if opts == nil {
+		opts = c.TransactOpts(_privateKey)
+	}
+	_to := Address(to)
+	switch {
+	case opts.GasFeeCap != nil:
+		tx = types.NewTx(&types.DynamicFeeTx{
+			To:         &_to,
+			ChainID:    c.chainId,
+			Nonce:      opts.Nonce.Uint64(),
+			Gas:        opts.GasLimit,
+			GasFeeCap:  opts.GasFeeCap,
+			GasTipCap:  opts.GasTipCap,
+			Value:      BigInt(amount),
+			Data:       data,
+			AccessList: accessList,
+		})
+		tx, err = types.SignTx(tx, types.NewLondonSigner(c.chainId), _privateKey)
+	case accessList != nil:
+		tx = types.NewTx(&types.AccessListTx{
+			To:         &_to,
+			ChainID:    c.chainId,
+			Nonce:      opts.Nonce.Uint64(),
+			Gas:        opts.GasLimit,
+			GasPrice:   opts.GasPrice,
+			Value:      BigInt(amount),
+			Data:       data,
+			AccessList: accessList,
+		})
+		tx, err = types.SignTx(tx, types.NewEIP2930Signer(c.chainId), _privateKey)
+	default:
+		tx = types.NewTx(&types.LegacyTx{
+			To:       &_to,
+			Nonce:    opts.Nonce.Uint64(),
+			Gas:      opts.GasLimit,
+			GasPrice: opts.GasPrice,
+			Value:    BigInt(amount),
+			Data:     data,
+		})
+		tx, err = types.SignTx(tx, types.NewEIP155Signer(c.chainId), _privateKey)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	msg := Type[ethereum.CallMsg](tx)
+	gasLimit, err := c.EstimateGas(msg, 3)
+	if err != nil {
+		return nil, nil, err
+	}
+	if opts.GasLimit < gasLimit || gasLimit == 0 {
+		return tx, nil, errors.New(fmt.Sprintf("[ERROR] Transfer::Gas required %v, but %v.\n", gasLimit, opts.GasLimit))
+	}
+	err = c.SendTransaction(tx, 3)
+	if err != nil {
+		return nil, nil, err
+	}
+	receipt, err = c.WaitMined(tx, 1)
+	if err != nil {
+		return nil, nil, err
+	}
+	return tx, receipt, nil
 }
 
 // Close all clients connections.
@@ -503,6 +607,40 @@ func (c *Clientx) TransactionSender(tx *types.Transaction, blockHash any, index 
 		}
 		return sender, err
 	}
+}
+
+// EstimateGas estimate tx gasUsed with maxTry.
+func (c *Clientx) EstimateGas(msg ethereum.CallMsg, maxTry ...int) (gasLimit uint64, err error) {
+	n := 1
+	if len(maxTry) > 0 && maxTry[0] > n {
+		n = maxTry[0]
+	}
+	for i := 0; i < n; i++ {
+		client := c.WaitNext()
+		gasLimit, err = client.EstimateGas(c.ctx, msg)
+		if err != nil {
+			c.logWarn(client.EstimateGas, client, err)
+			continue
+		}
+	}
+	return gasLimit, err
+}
+
+// SendTransaction send Transaction with maxTry.
+func (c *Clientx) SendTransaction(tx *types.Transaction, maxTry ...int) (err error) {
+	n := 1
+	if len(maxTry) > 0 && maxTry[0] > n {
+		n = maxTry[0]
+	}
+	for i := 0; i < n; i++ {
+		client := c.WaitNext()
+		err = client.SendTransaction(c.ctx, tx)
+		if err != nil {
+			c.logWarn(client.SendTransaction, client, err)
+			continue
+		}
+	}
+	return err
 }
 
 // TransactionCount returns the total number of transactions in the given block.
