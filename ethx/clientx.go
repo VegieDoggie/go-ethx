@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"golang.org/x/time/rate"
 	"log"
-	"math"
 	"math/big"
 	"sync"
 	"time"
@@ -127,7 +126,7 @@ func (c *Clientx) logWarn(f any, client *ethclient.Client, err error) {
 }
 
 func (c *Clientx) NewMust(constructor any, addressLike any, maxErrNum ...int) func(f any, args ...any) any {
-	n := math.MaxInt
+	n := 999
 	if len(maxErrNum) > 0 {
 		n = maxErrNum[0]
 	}
