@@ -13,7 +13,7 @@
 > 默认情况下，并发的最大数量=rpc的数量，这一限制是安全的，你可以放心地循环或并发地进行接口调用。
 
 ```go
-go get github.com/VegieDoggie/go -ethx@v1.6.0
+go get github.com/VegieDoggie/go -ethx@v1.6.1
 
 rpcList := []string{
 "https://data-seed-prebsc-2-s2.binance.org:8545",

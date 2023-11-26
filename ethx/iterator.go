@@ -2,8 +2,11 @@ package ethx
 
 import (
 	"context"
+	"golang.org/x/exp/slices"
 	"golang.org/x/time/rate"
+	"math"
 	"math/rand"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -39,15 +42,46 @@ func (r *Iterator[T]) WaitNext() T {
 func (r *Iterator[T]) UnwaitNext() T {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+	r.posi %= r.Len()
 	t := r.list[r.posi]
-	r.posi = (r.posi + 1) % len(r.list)
+	r.posi++
 	return t
 }
 
 func (r *Iterator[T]) Add(item ...T) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+	beforeLen := r.Len()
 	r.list = append(r.list, item...)
+	r.updateLimit(beforeLen)
+}
+
+func (r *Iterator[T]) Remove(item ...T) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	beforeLen := r.Len()
+	for i := r.Len() - 1; i >= 0; i-- {
+		for j := range item {
+			if r.isEqual(r.list[i], item[j]) {
+				slices.Delete(r.list, i, i+1)
+			}
+		}
+	}
+	r.updateLimit(beforeLen)
+}
+
+func (r *Iterator[T]) updateLimit(beforeLen int) {
+	if curLen := r.Len(); beforeLen != curLen && curLen > 0 {
+		if beforeLen > 0 {
+			ratio := float64(curLen) / float64(beforeLen)
+			r.limit.SetLimit(rate.Limit(float64(r.limit.Limit()) * ratio))
+			r.limit.SetBurst(int(math.Round(float64(r.limit.Burst()) * ratio)))
+		} else {
+			if r.limit == nil {
+				r.limit = rate.NewLimiter(rate.Limit(curLen), curLen)
+			}
+		}
+	}
 }
 
 func (r *Iterator[T]) Len() int {
@@ -89,4 +123,13 @@ func (r *Iterator[T]) Shuffle() *Iterator[T] {
 		r.list[a], r.list[b] = r.list[b], r.list[a]
 	})
 	return r
+}
+
+func (r *Iterator[T]) isEqual(a, b any) bool {
+	if reflect.TypeOf(a).Kind() == reflect.Ptr || reflect.TypeOf(b).Kind() == reflect.Ptr {
+		if a == b {
+			return true
+		}
+	}
+	return reflect.DeepEqual(a, b)
 }
