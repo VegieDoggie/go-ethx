@@ -26,8 +26,8 @@ tx, receipt, err := clientx.Transfer(prikey, to, BigInt("1e18"))
 
 // 可靠的接口请求: 合约
 blockNumber := clientx.NewMust(UniswapV2Pair.NewUniswapV2Pair, "0xbe8561968ce5f9a9bf5cf6a117dfdee1b0e56d75")
-token0 := must("Token0").(common.Address)
-token1 := must("Token1").(common.Address)
+token0 := must("Token0").(common.Address) // = must(UniswapV2Pair.UniswapV2Pair.Token0).(common.Address)
+token1 := must("Token1").(common.Address) // = must(UniswapV2Pair.UniswapV2Pair.Token1).(common.Address)
 
 // 任意区间的区块日志扫描功能
 var topics [][]common.Hash
