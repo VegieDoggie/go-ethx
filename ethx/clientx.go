@@ -27,6 +27,7 @@ type Clientx struct {
 	chainId        *big.Int
 	latestHeader   *types.Header
 	stop           chan bool
+	miningInterval time.Duration
 }
 
 // NewSimpleClientx create *Clientx
@@ -63,11 +64,14 @@ func NewClientx(rpcList []string, weights []int, defaultNotFoundBlocks uint64, l
 	go func() {
 		queryTicker := time.NewTicker(time.Second)
 		defer queryTicker.Stop()
+		before := time.Now().Add(-1 * time.Second)
 		for {
 			header, err := c.HeaderByNumber(nil, 0)
 			if err == nil && header.Number.Cmp(c.latestHeader.Number) == 1 {
 				// TODO 考虑将所有的出块等待函数改成订阅发布模式
+				c.miningInterval = time.Since(before)
 				c.latestHeader = header
+				before = time.Now()
 			}
 			select {
 			case <-c.stop:
@@ -836,7 +840,7 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 // It stops waiting when the context is canceled.
 // ethereum/go-ethereum@v1.11.6/accounts/abi/bind/util.go:32
 func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoundBlocks ...uint64) (*types.Receipt, error) {
-	queryTicker := time.NewTicker(time.Second)
+	queryTicker := time.NewTicker(c.miningInterval)
 	defer queryTicker.Stop()
 	txHash := tx.Hash()
 	_confirmReturn := c.BlockNumber() + confirmBlocks
