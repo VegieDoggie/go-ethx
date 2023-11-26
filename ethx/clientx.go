@@ -124,6 +124,10 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 	return clientIterator, rpcMap, latestChainId
 }
 
+func (c *Clientx) NextClient() *ethclient.Client {
+	return c.it.WaitNext()
+}
+
 func (c *Clientx) GetRPCs() (rpcList []string) {
 	for _, v := range c.rpcMap {
 		rpcList = append(rpcList, v)
