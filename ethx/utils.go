@@ -411,7 +411,7 @@ func PrivateKey(priLike any) *ecdsa.PrivateKey {
 }
 
 // CallMsg create ethereum.CallMsg from *types.Transaction
-func CallMsg(tx *types.Transaction, fromAddress ...any) (callMsg ethereum.CallMsg) {
+func CallMsg(fromAddress any, tx *types.Transaction) (callMsg ethereum.CallMsg) {
 	switch tx.Type() {
 	case types.AccessListTxType:
 		callMsg = ethereum.CallMsg{
@@ -441,8 +441,6 @@ func CallMsg(tx *types.Transaction, fromAddress ...any) (callMsg ethereum.CallMs
 			Data:     tx.Data(),
 		}
 	}
-	if len(fromAddress) > 0 {
-		callMsg.From = Address(fromAddress[0])
-	}
+	callMsg.From = Address(fromAddress)
 	return callMsg
 }
