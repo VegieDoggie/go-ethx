@@ -23,6 +23,7 @@ rpcList := []string{
 // 可靠的接口请求: 客户端
 clientx := ethx.NewSimpleClientx(rpcList)
 tx, receipt, err := clientx.Transfer(prikey, to, BigInt("1e18"))
+// clientx.UpdateRPCs(urls) // rpc 刷新功能，不会影响现有功能
 
 // 可靠的接口请求: 合约
 blockNumber := clientx.NewMust(UniswapV2Pair.NewUniswapV2Pair, "0xbe8561968ce5f9a9bf5cf6a117dfdee1b0e56d75")
