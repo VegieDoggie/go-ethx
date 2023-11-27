@@ -42,14 +42,14 @@ func NewSimpleClientx(rpcList []string, concurrency ...int) *Clientx {
 	for range rpcList {
 		weights = append(weights, _concurrency)
 	}
-	return NewClientx(rpcList, weights, uint64(len(rpcList)*3))
+	return NewClientx(rpcList, weights)
 }
 
 // NewClientx connects clients to the given URLs, to provide a reliable Ethereum RPC API call, includes
 // a timer to regularly update block height(AutoBlockNumber).
 // If weight <= 1, the weight is always 1.
 // Note: If len(weightList) == 0, then default weight = 1 will be active.
-func NewClientx(rpcList []string, weights []int, defaultNotFoundBlocks uint64, limiter ...*rate.Limiter) *Clientx {
+func NewClientx(rpcList []string, weights []int, limiter ...*rate.Limiter) *Clientx {
 	iterator, rpcMap, chainId := newClientIteratorWithWeight(rpcList, weights, limiter...)
 	c := &Clientx{
 		ctx:            context.Background(),
@@ -57,34 +57,10 @@ func NewClientx(rpcList []string, weights []int, defaultNotFoundBlocks uint64, l
 		rpcMap:         rpcMap,
 		chainId:        chainId,
 		rpcErrCountMap: make(map[*ethclient.Client]uint),
-		notFoundBlocks: defaultNotFoundBlocks,
+		notFoundBlocks: uint64(len(rpcMap) * 2),
 		latestHeader:   &types.Header{Number: BigInt(0)},
-		stop:           make(chan bool),
 	}
-	go func() {
-		queryTicker := time.NewTicker(time.Second)
-		defer queryTicker.Stop()
-		before := time.Now().Add(-1 * time.Second)
-		for {
-			header, err := c.HeaderByNumber(nil, 0)
-			if err == nil && header.Number.Cmp(c.latestHeader.Number) == 1 {
-				// TODO 考虑将所有的出块等待函数改成订阅发布模式
-				c.miningInterval = time.Since(before)
-				c.latestHeader = header
-				before = time.Now()
-			}
-			select {
-			case <-c.stop:
-				return
-			case <-queryTicker.C:
-			}
-		}
-	}()
-	queryTicker := time.NewTicker(100 * time.Millisecond)
-	defer queryTicker.Stop()
-	for c.latestHeader.Number.Uint64() == 0 {
-		<-queryTicker.C
-	}
+	c.startBackground()
 	return c
 }
 
@@ -107,10 +83,10 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 				} else if latestChainId.Cmp(chainId) != 0 {
 					panic(errors.New(fmt.Sprintf("[ERROR] rpc(%v) chainID is %v,but rpc(%v) chainId is %v\n", rpcList[i-1], latestChainId, rpc, chainId)))
 				}
+				reliableClients = append(reliableClients, client)
 				for j := 1; j < weightList[i]; j++ {
 					reliableClients = append(reliableClients, client)
 				}
-				reliableClients = append(reliableClients, client)
 				rpcMap[client] = rpc
 				continue
 			}
@@ -182,7 +158,7 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 
 func (c *Clientx) record(f any, client *ethclient.Client, err error) {
 	c.rpcErrCountMap[client]++
-	log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format("2006-01-02 15:04:05"), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
+	log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
 }
 
 func (c *Clientx) NewMust(constructor any, addressLike any, maxErrNum ...int) func(f any, args ...any) any {
@@ -305,12 +281,26 @@ func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOp
 	return tx, receipt, nil
 }
 
-// Close all clients connections.
-func (c *Clientx) Close() {
-	c.stop <- true
-	clients := c.it.All()
-	for i := range clients {
-		clients[i].Close()
+func (c *Clientx) startBackground() {
+	beforeNumber := c.BlockNumber()
+	go func() {
+		queryTicker := time.NewTicker(time.Second)
+		defer queryTicker.Stop()
+		beforeTime := time.Now().Add(-time.Second)
+		for {
+			header, err := c.HeaderByNumber(nil, 0)
+			if err == nil && header.Number.Cmp(c.latestHeader.Number) > 0 {
+				c.miningInterval = time.Since(beforeTime)
+				c.latestHeader = header
+				beforeTime = time.Now()
+			}
+			<-queryTicker.C
+		}
+	}()
+	queryTicker := time.NewTicker(100 * time.Millisecond)
+	defer queryTicker.Stop()
+	for beforeNumber >= c.BlockNumber() {
+		<-queryTicker.C
 	}
 }
 
@@ -552,11 +542,7 @@ func (c *Clientx) BlockByHash(hash any, notFoundBlocks ...uint64) (block *types.
 					return nil, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return nil, errors.New("BlockByHash::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return block, nil
@@ -583,11 +569,7 @@ func (c *Clientx) BlockByNumber(blockNumber any, notFoundBlocks ...uint64) (bloc
 					return nil, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return nil, errors.New("BlockByNumber::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return block, nil
@@ -610,11 +592,7 @@ func (c *Clientx) HeaderByHash(hash any, notFoundBlocks ...uint64) (header *type
 					return nil, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return nil, errors.New("HeaderByHash::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return header, nil
@@ -638,11 +616,7 @@ func (c *Clientx) HeaderByNumber(blockNumber any, notFoundBlocks ...uint64) (hea
 					return nil, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return nil, errors.New("HeaderByNumber::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return header, nil
@@ -665,11 +639,7 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 					return nil, isPending, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return nil, false, errors.New("TransactionByHash::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return tx, isPending, nil
@@ -697,11 +667,7 @@ func (c *Clientx) TransactionSender(tx *types.Transaction, blockHash any, index 
 					return sender, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return sender, errors.New("TransactionSender::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return sender, err
@@ -760,11 +726,7 @@ func (c *Clientx) TransactionCount(blockHash any, notFoundBlocks ...uint64) (cou
 					return count, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return 0, errors.New("TransactionCount::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return count, nil
@@ -801,11 +763,7 @@ func (c *Clientx) TransactionInBlock(blockHash any, index uint, notFoundBlocks .
 					return tx, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return nil, errors.New("TransactionInBlock::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return tx, err
@@ -829,11 +787,7 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 					return receipt, err
 				}
 			}
-			select {
-			case <-c.stop:
-				return nil, errors.New("TransactionReceipt::stopped!\n")
-			case <-queryTicker.C:
-			}
+			<-queryTicker.C
 			continue
 		}
 		return receipt, err
@@ -865,11 +819,7 @@ func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoun
 				return receipt, nil
 			}
 		}
-		select {
-		case <-c.stop:
-			return nil, errors.New("WaitMined::stopped!\n")
-		case <-queryTicker.C:
-		}
+		<-queryTicker.C
 	}
 }
 
@@ -898,64 +848,64 @@ func (c *Clientx) WaitDeployed(tx *types.Transaction, confirmBlocks uint64, notF
 
 type Scanner struct {
 	*Clientx
-	Addresses      []common.Address
-	Topics         [][]common.Hash
-	OverrideBlocks uint64
-	IntervalBlocks uint64
-	DelayBlocks    uint64
-	TxHashSet      mapset.Set[string]
-	Mu             sync.Mutex
+	addresses      []common.Address
+	topics         [][]common.Hash
+	overrideBlocks uint64
+	intervalBlocks uint64
+	delayBlocks    uint64
+	txHashSet      mapset.Set[string]
+	mu             sync.Mutex
 }
 
 // NewScanner returns the next Ethereum Client.
 func (c *Clientx) NewScanner(topics [][]common.Hash, addresses []common.Address, intervalBlocks, overrideBlocks, delayBlocks uint64) *Scanner {
 	return &Scanner{
 		Clientx:        c,
-		Addresses:      addresses,
-		Topics:         topics,
-		IntervalBlocks: intervalBlocks,
-		OverrideBlocks: overrideBlocks,
-		DelayBlocks:    delayBlocks,
-		TxHashSet:      mapset.NewThreadUnsafeSet[string](),
-		Mu:             sync.Mutex{},
+		addresses:      addresses,
+		topics:         topics,
+		intervalBlocks: intervalBlocks,
+		overrideBlocks: overrideBlocks,
+		delayBlocks:    delayBlocks,
+		txHashSet:      mapset.NewThreadUnsafeSet[string](),
+		mu:             sync.Mutex{},
 	}
 }
 
 func (s *Scanner) Scan(from, to uint64) (logs []types.Log, addressTopicLogsMap map[common.Address]map[common.Hash][]*types.Log) {
-	if from+s.DelayBlocks > to {
+	if from+s.delayBlocks > to {
 		return
 	}
-	to -= s.DelayBlocks
+	to -= s.delayBlocks
 	s.it.Shuffle()
 	fetch := func(_from, _to uint64) {
 		// Attention!!!Repeat scanning _to prevent missing blocks
 		var query = ethereum.FilterQuery{
 			ToBlock:   new(big.Int).SetUint64(_to),
-			Addresses: s.Addresses,
-			Topics:    s.Topics,
+			Addresses: s.addresses,
+			Topics:    s.topics,
 		}
-		if _from > from+s.OverrideBlocks {
-			query.FromBlock = new(big.Int).SetUint64(_from - s.OverrideBlocks)
+		if _from > from+s.overrideBlocks {
+			query.FromBlock = new(big.Int).SetUint64(_from - s.overrideBlocks)
 		} else {
 			query.FromBlock = new(big.Int).SetUint64(_from)
 		}
 		nLogs := s.FilterLogs(query)
 		log.Printf("Scan: %v(%v)-%v Success!\n", _from, query.FromBlock, _to)
 		if len(nLogs) > 0 {
-			s.Mu.Lock()
+			s.mu.Lock()
 			var hashID string
 			for _, nLog := range nLogs {
 				hashID = fmt.Sprintf("%v%v", nLog.TxHash, nLog.Index)
-				if !s.TxHashSet.Contains(hashID) {
-					s.TxHashSet.Add(hashID)
+				if !s.txHashSet.Contains(hashID) {
+					s.txHashSet.Add(hashID)
 					logs = append(logs, nLog)
 				}
 			}
-			s.Mu.Unlock()
+			s.mu.Unlock()
 		}
 	}
 
-	s.execute(from, to, s.IntervalBlocks, fetch)
+	s.execute(from, to, s.intervalBlocks, fetch)
 
 	addressTopicLogsMap = make(map[common.Address]map[common.Hash][]*types.Log)
 	for _, nLog := range logs {
