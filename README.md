@@ -13,7 +13,7 @@
 > 默认情况下，每秒并发上限=rpc的数量(可自定义)，因此可以放心地循环或并发地进行接口调用。
 
 ```go
-go get github.com/VegieDoggie/go-ethx@v1.6.4
+go get github.com/VegieDoggie/go-ethx@v1.6.5
 
 rpcList := []string{
 "https://data-seed-prebsc-2-s2.binance.org:8545",

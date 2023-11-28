@@ -13,6 +13,7 @@ import (
 	"golang.org/x/time/rate"
 	"log"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 )
@@ -156,9 +157,14 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 	log.Printf("[DONE] UpdateRPCs::from=%v, to=%v, params=%v\n", oldRPCs, c.GetRPCs(), newRPCs)
 }
 
-func (c *Clientx) record(f any, client *ethclient.Client, err error) {
+func (c *Clientx) errorCallback(f any, client *ethclient.Client, err error) {
 	c.rpcErrCountMap[client]++
-	log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
+	rpc := c.rpcMap[client]
+	if strings.HasPrefix(rpc, "ws") && strings.Contains(err.Error(), "close") {
+		newClient, _ := ethclient.Dial(c.rpcMap[client])
+		*client = *newClient
+	}
+	log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), rpc, c.rpcErrCountMap[client], err)
 }
 
 func (c *Clientx) NewMust(constructor any, addressLike any, maxErrNum ...int) func(f any, args ...any) any {
@@ -176,7 +182,7 @@ func (c *Clientx) NewMust(constructor any, addressLike any, maxErrNum ...int) fu
 			}
 			ret = callStructFunc(ret[0], f, args...)
 			if err, ok := ret[len(ret)-1].(error); ok {
-				c.record(f, client, err)
+				c.errorCallback(f, client, err)
 				continue
 			}
 			return ret[:len(ret)-1][0]
@@ -321,7 +327,7 @@ func (c *Clientx) NetworkID() (networkID *big.Int) {
 		client := c.it.WaitNext()
 		networkID, err = client.NetworkID(c.ctx)
 		if err != nil {
-			c.record(client.NetworkID, client, err)
+			c.errorCallback(client.NetworkID, client, err)
 			continue
 		}
 		return
@@ -340,7 +346,7 @@ func (c *Clientx) BalanceAt(account any, blockNumber ...any) (balance *big.Int) 
 		client := c.it.WaitNext()
 		balance, err := client.BalanceAt(c.ctx, _account, _blockNumber)
 		if err != nil {
-			c.record(client.BalanceAt, client, err)
+			c.errorCallback(client.BalanceAt, client, err)
 			continue
 		}
 		return balance
@@ -354,7 +360,7 @@ func (c *Clientx) PendingBalanceAt(account any) (balance *big.Int) {
 		client := c.it.WaitNext()
 		balance, err := client.PendingBalanceAt(c.ctx, _account)
 		if err != nil {
-			c.record(client.PendingBalanceAt, client, err)
+			c.errorCallback(client.PendingBalanceAt, client, err)
 			continue
 		}
 		return balance
@@ -373,7 +379,7 @@ func (c *Clientx) NonceAt(account any, blockNumber ...any) (nonce uint64) {
 		client := c.it.WaitNext()
 		nonce, err := client.NonceAt(c.ctx, _account, _blockNumber)
 		if err != nil {
-			c.record(client.NonceAt, client, err)
+			c.errorCallback(client.NonceAt, client, err)
 			continue
 		}
 		return nonce
@@ -388,7 +394,7 @@ func (c *Clientx) PendingNonceAt(account any) (nonce uint64) {
 		client := c.it.WaitNext()
 		nonce, err := client.PendingNonceAt(c.ctx, _account)
 		if err != nil {
-			c.record(client.PendingNonceAt, client, err)
+			c.errorCallback(client.PendingNonceAt, client, err)
 			continue
 		}
 		return nonce
@@ -401,7 +407,7 @@ func (c *Clientx) FilterLogs(q ethereum.FilterQuery) (logs []types.Log) {
 		client := c.it.WaitNext()
 		logs, err := client.FilterLogs(c.ctx, q)
 		if err != nil {
-			c.record(client.FilterLogs, client, err)
+			c.errorCallback(client.FilterLogs, client, err)
 			continue
 		}
 		return logs
@@ -415,7 +421,7 @@ func (c *Clientx) SuggestGasPrice() (gasPrice *big.Int) {
 		client := c.it.WaitNext()
 		gasPrice, err := client.SuggestGasPrice(c.ctx)
 		if err != nil {
-			c.record(client.SuggestGasPrice, client, err)
+			c.errorCallback(client.SuggestGasPrice, client, err)
 			continue
 		}
 		return gasPrice
@@ -429,7 +435,7 @@ func (c *Clientx) SuggestGasTipCap() (gasTipCap *big.Int) {
 		client := c.it.WaitNext()
 		gasTipCap, err := client.SuggestGasTipCap(c.ctx)
 		if err != nil {
-			c.record(client.SuggestGasTipCap, client, err)
+			c.errorCallback(client.SuggestGasTipCap, client, err)
 			continue
 		}
 		return gasTipCap
@@ -442,7 +448,7 @@ func (c *Clientx) FeeHistory(blockCount uint64, lastBlock any, rewardPercentiles
 		client := c.it.WaitNext()
 		feeHistory, err := client.FeeHistory(c.ctx, blockCount, BigInt(lastBlock), rewardPercentiles)
 		if err != nil {
-			c.record(client.FeeHistory, client, err)
+			c.errorCallback(client.FeeHistory, client, err)
 			continue
 		}
 		return feeHistory
@@ -461,7 +467,7 @@ func (c *Clientx) StorageAt(account, keyHash any, blockNumber ...any) (storage [
 		client := c.it.WaitNext()
 		storage, err := client.StorageAt(c.ctx, _account, _keyHash, _blockNumber)
 		if err != nil {
-			c.record(client.StorageAt, client, err)
+			c.errorCallback(client.StorageAt, client, err)
 			continue
 		}
 		return storage
@@ -475,7 +481,7 @@ func (c *Clientx) PendingStorageAt(account, keyHash any) (storage []byte) {
 		client := c.it.WaitNext()
 		storage, err := client.PendingStorageAt(c.ctx, _account, _keyHash)
 		if err != nil {
-			c.record(client.PendingStorageAt, client, err)
+			c.errorCallback(client.PendingStorageAt, client, err)
 			continue
 		}
 		return storage
@@ -494,7 +500,7 @@ func (c *Clientx) CodeAt(account any, blockNumber ...any) (code []byte) {
 		client := c.it.WaitNext()
 		code, err := client.CodeAt(c.ctx, _account, _blockNumber)
 		if err != nil {
-			c.record(client.CodeAt, client, err)
+			c.errorCallback(client.CodeAt, client, err)
 			continue
 		}
 		return code
@@ -508,7 +514,7 @@ func (c *Clientx) PendingCodeAt(account any) (code []byte) {
 		client := c.it.WaitNext()
 		code, err := client.PendingCodeAt(c.ctx, _account)
 		if err != nil {
-			c.record(client.PendingCodeAt, client, err)
+			c.errorCallback(client.PendingCodeAt, client, err)
 			continue
 		}
 		return code
@@ -536,7 +542,7 @@ func (c *Clientx) BlockByHash(hash any, notFoundBlocks ...uint64) (block *types.
 		client := c.it.WaitNext()
 		block, err = client.BlockByHash(c.ctx, _hash)
 		if err != nil {
-			c.record(client.BlockByHash, client, err)
+			c.errorCallback(client.BlockByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return nil, err
@@ -563,7 +569,7 @@ func (c *Clientx) BlockByNumber(blockNumber any, notFoundBlocks ...uint64) (bloc
 		client := c.it.WaitNext()
 		block, err = client.BlockByNumber(c.ctx, _blockNumber)
 		if err != nil {
-			c.record(client.BlockByNumber, client, err)
+			c.errorCallback(client.BlockByNumber, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return nil, err
@@ -586,7 +592,7 @@ func (c *Clientx) HeaderByHash(hash any, notFoundBlocks ...uint64) (header *type
 		client := c.it.WaitNext()
 		header, err = client.HeaderByHash(c.ctx, _hash)
 		if err != nil {
-			c.record(client.HeaderByHash, client, err)
+			c.errorCallback(client.HeaderByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return nil, err
@@ -610,7 +616,7 @@ func (c *Clientx) HeaderByNumber(blockNumber any, notFoundBlocks ...uint64) (hea
 		client := c.it.WaitNext()
 		header, err = client.HeaderByNumber(c.ctx, _blockNumber)
 		if err != nil {
-			c.record(client.HeaderByNumber, client, err)
+			c.errorCallback(client.HeaderByNumber, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return nil, err
@@ -633,7 +639,7 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 		client := c.it.WaitNext()
 		tx, isPending, err = client.TransactionByHash(c.ctx, _hash)
 		if err != nil {
-			c.record(client.TransactionByHash, client, err)
+			c.errorCallback(client.TransactionByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return nil, isPending, err
@@ -661,7 +667,7 @@ func (c *Clientx) TransactionSender(tx *types.Transaction, blockHash any, index 
 		client := c.it.WaitNext()
 		sender, err = client.TransactionSender(c.ctx, tx, _blockHash, index)
 		if err != nil {
-			c.record(client.TransactionSender, client, err)
+			c.errorCallback(client.TransactionSender, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return sender, err
@@ -684,7 +690,7 @@ func (c *Clientx) EstimateGas(msg ethereum.CallMsg, maxTry ...int) (gasLimit uin
 		client := c.it.WaitNext()
 		gasLimit, err = client.EstimateGas(c.ctx, msg)
 		if err != nil {
-			c.record(client.EstimateGas, client, err)
+			c.errorCallback(client.EstimateGas, client, err)
 			continue
 		}
 		break
@@ -702,7 +708,7 @@ func (c *Clientx) SendTransaction(tx *types.Transaction, maxTry ...int) (err err
 		client := c.it.WaitNext()
 		err = client.SendTransaction(c.ctx, tx)
 		if err != nil {
-			c.record(client.SendTransaction, client, err)
+			c.errorCallback(client.SendTransaction, client, err)
 			continue
 		}
 		break
@@ -720,7 +726,7 @@ func (c *Clientx) TransactionCount(blockHash any, notFoundBlocks ...uint64) (cou
 		client := c.it.WaitNext()
 		count, err = client.TransactionCount(c.ctx, _blockHash)
 		if err != nil {
-			c.record(client.TransactionCount, client, err)
+			c.errorCallback(client.TransactionCount, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return count, err
@@ -740,7 +746,7 @@ func (c *Clientx) PendingTransactionCount() (count uint) {
 		client := c.it.WaitNext()
 		count, err = client.PendingTransactionCount(c.ctx)
 		if err != nil {
-			c.record(client.PendingTransactionCount, client, err)
+			c.errorCallback(client.PendingTransactionCount, client, err)
 			continue
 		}
 		return
@@ -757,7 +763,7 @@ func (c *Clientx) TransactionInBlock(blockHash any, index uint, notFoundBlocks .
 		client := c.it.WaitNext()
 		tx, err = client.TransactionInBlock(c.ctx, _blockHash, index)
 		if err != nil {
-			c.record(client.TransactionInBlock, client, err)
+			c.errorCallback(client.TransactionInBlock, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return tx, err
@@ -781,7 +787,7 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 		client := c.it.WaitNext()
 		receipt, err = client.TransactionReceipt(c.ctx, _txHash)
 		if err != nil {
-			c.record(client.TransactionReceipt, client, err)
+			c.errorCallback(client.TransactionReceipt, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return receipt, err
@@ -807,7 +813,7 @@ func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoun
 		client := c.it.WaitNext()
 		receipt, err := client.TransactionReceipt(c.ctx, txHash)
 		if err != nil {
-			c.record(c.WaitMined, client, err)
+			c.errorCallback(c.WaitMined, client, err)
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return nil, err
