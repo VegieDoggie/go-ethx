@@ -103,7 +103,7 @@ func (r *Iterator[T]) NewCall(maxTry ...int) func(f any, args ...any) []any {
 	}
 	return func(f any, args ...any) (rets []any) {
 		for i := 0; i < n; i++ {
-			rets = callStructFunc(r.WaitNext(), f, args...)
+			rets = callStructMethod(r.WaitNext(), f, args...)
 			if len(rets) > 0 {
 				if _, ok := rets[len(rets)-1].(error); ok {
 					continue
