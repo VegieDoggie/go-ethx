@@ -28,6 +28,7 @@ type Clientx struct {
 	latestHeader   *types.Header
 	stop           chan bool
 	miningInterval time.Duration
+	startedAt      time.Time
 }
 
 // NewSimpleClientx create *Clientx
@@ -60,6 +61,7 @@ func NewClientx(rpcList []string, weights []int, limiter ...*rate.Limiter) *Clie
 		rpcErrCountMap: make(map[*ethclient.Client]uint),
 		notFoundBlocks: uint64(len(rpcList) * 2),
 		latestHeader:   &types.Header{Number: BigInt(0)},
+		startedAt:      time.Now(),
 	}
 	c.startBackground()
 	return c
@@ -149,6 +151,10 @@ func checkChainid(rpc string, maxErr ...int) (*ethclient.Client, *big.Int, error
 }
 
 func (c *Clientx) UpdateRPCs(newRPCs []string) {
+	if time.Since(c.startedAt) < 60*time.Second {
+		log.Printf("[WARN] UpdateRPCs::started less than 60s\n")
+		return
+	}
 	if len(newRPCs) == 0 {
 		return
 	}
