@@ -39,3 +39,13 @@ func Test_Error(t *testing.T) {
 	//	<-queryTicker.C
 	//}
 }
+
+func Test_segmentCallback(t *testing.T) {
+	log.Println(segmentCallback(0, 100, EventConfig{
+		IntervalBlocks: 10,
+		OverrideBlocks: 0,
+		DelayBlocks:    0,
+	}, func(from, to uint64) {
+		log.Println(from, to)
+	}))
+}

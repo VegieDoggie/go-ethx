@@ -3,11 +3,11 @@ module github.com/VegieDoggie/go-ethx
 go 1.20
 
 require (
-	github.com/deckarep/golang-set/v2 v2.4.0
+	github.com/deckarep/golang-set/v2 v2.5.0
 	github.com/ethereum/go-ethereum v1.13.5
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
-	golang.org/x/time v0.4.0
+	golang.org/x/exp v0.0.0-20231127185646-65229373498e
+	golang.org/x/time v0.5.0
 )
 
 require (

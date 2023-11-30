@@ -10,11 +10,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/event"
 	"golang.org/x/time/rate"
 	"log"
 	"math/big"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -52,7 +50,7 @@ func NewSimpleClientx(rpcList []string, concurrency ...int) *Clientx {
 // If weight <= 1, the weight is always 1.
 // Note: If len(weightList) == 0, then default weight = 1 will be active.
 func NewClientx(rpcList []string, weights []int, limiter ...*rate.Limiter) *Clientx {
-	iterator, rpcMap, chainId := newClientIteratorWithWeight(rpcList, weights, limiter...)
+	iterator, rpcMap, chainId := buildIterator(rpcList, weights, limiter...)
 	c := &Clientx{
 		ctx:            context.Background(),
 		it:             iterator,
@@ -66,8 +64,8 @@ func NewClientx(rpcList []string, weights []int, limiter ...*rate.Limiter) *Clie
 	return c
 }
 
-// newClientIteratorWithWeight creates a clientIterator with wights.
-func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...*rate.Limiter) (clientIterator *Iterator[*ethclient.Client], rpcMap map[*ethclient.Client]string, latestChainId *big.Int) {
+// buildIterator creates a clientIterator with wights.
+func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter) (clientIterator *Iterator[*ethclient.Client], rpcMap map[*ethclient.Client]string, latestChainId *big.Int) {
 	if len(rpcList) != len(weightList) {
 		tmp := weightList
 		weightList = make([]int, len(rpcList))
@@ -93,10 +91,10 @@ func newClientIteratorWithWeight(rpcList []string, weightList []int, limiter ...
 				continue
 			}
 		}
-		log.Printf("[WARN] newClientIteratorWithWeight::Unreliable rpc: %v\n", rpc)
+		log.Printf("[WARN] buildIterator::Unreliable rpc: %v\n", rpc)
 	}
 	if len(reliableClients) == 0 {
-		panic(errors.New(fmt.Sprintf("[ERROR] newClientIteratorWithWeight::Unreliable rpc List: %v\n", rpcList)))
+		panic(errors.New(fmt.Sprintf("[ERROR] buildIterator::Unreliable rpc List: %v\n", rpcList)))
 	}
 	clientIterator = NewIterator[*ethclient.Client](reliableClients, limiter...).Shuffle()
 	return clientIterator, rpcMap, latestChainId
@@ -120,6 +118,7 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 	oldRPCs := c.GetRPCs()
 	newSet := mapset.NewThreadUnsafeSet[string](newRPCs...)
 	oldSet := mapset.NewThreadUnsafeSet[string](oldRPCs...)
+	updated := false
 	// rpc in newRPCs but not in oldRPCs: ADD
 	for _, rpc := range newRPCs {
 		if !oldSet.Contains(rpc) {
@@ -131,6 +130,7 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 						log.Println(fmt.Sprintf("[WARN] UpdateRPCs::required chainID is %v,but rpc(%v) chainId is %v\n", c.chainId, rpc, chainId))
 						continue
 					}
+					updated = true
 					c.rpcMap[client] = rpc
 					c.it.Add(client)
 					continue
@@ -150,154 +150,20 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 				}
 			}
 			if c.it.Len() > 1 {
+				updated = true
 				delete(c.rpcMap, client)
 				c.it.Remove(client)
 			}
 		}
 	}
-	log.Printf("[DONE] UpdateRPCs::from=%v, to=%v, params=%v\n", oldRPCs, c.GetRPCs(), newRPCs)
+	if updated {
+		log.Printf("[SUCCESS] UpdateRPCs::from=%v, to=%v\n", newRPCs, c.GetRPCs())
+	}
 }
 
 func (c *Clientx) errorCallback(f any, client *ethclient.Client, err error) {
 	c.rpcErrCountMap[client]++
 	log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
-}
-
-type MustContract struct {
-	client          *Clientx
-	constructor     any
-	contractName    string
-	contractAddress common.Address
-	maxErrNum       int
-	config          EventConfig
-}
-
-func (c *Clientx) NewMustContract(constructor any, addressLike any, config EventConfig, maxErrNum ...int) *MustContract {
-	config.panicIfNotValid()
-	_maxErrNum := 99
-	if len(maxErrNum) > 0 {
-		_maxErrNum = maxErrNum[0]
-	}
-	return &MustContract{
-		client:          c,
-		constructor:     constructor,
-		contractName:    getFuncName(constructor)[3:],
-		contractAddress: Address(addressLike),
-		maxErrNum:       _maxErrNum,
-		config:          config,
-	}
-}
-
-func (m *MustContract) Run0(f any, args ...any) any {
-	return m.Run(f, args...)[0]
-}
-
-func (m *MustContract) Run(f any, args ...any) []any {
-	for i := 0; i < m.maxErrNum; i++ {
-		ret, err := m.exec(f, args...)
-		if err != nil {
-			continue
-		}
-		return ret
-	}
-	panic(errors.New(fmt.Sprintf("%v::exceed maxErrNum(%v), contract=%v", getFuncName(f), m.maxErrNum, m.contractAddress)))
-}
-
-func (m *MustContract) exec(f any, args ...any) ([]any, error) {
-	client := m.client.it.WaitNext()
-	instanceRet := callFunc(m.constructor, m.contractAddress, client)
-	if err, ok := instanceRet[len(instanceRet)-1].(error); ok {
-		panic(err)
-	}
-	ret := callStructMethod(instanceRet[0], f, args...)
-	if i := len(ret) - 1; i >= 0 {
-		if err, ok := ret[i].(error); ok {
-			m.client.errorCallback(f, client, err)
-			return nil, err
-		}
-		return ret[:i], nil
-	}
-	return nil, nil
-}
-
-// Subscribe sink chan<- *MarketRouterUpdatePosition
-func (m *MustContract) Subscribe(from any, ch any, index ...[]any) (sub event.Subscription) {
-	// `chan<- *MarketRouterUpdatePosition` => "UpdatePosition"
-	eventName := reflect.TypeOf(ch).Elem().Elem().Name()[len(m.contractName):]
-	filterFcName := "Filter" + eventName
-	chMiddle := make(chan any, 128)
-	ignoreCloseChannelPanic := func() {
-		if err, ok := recover().(error); ok {
-			if err.Error() != "send on closed channel" {
-				panic(err)
-			}
-		}
-	}
-	filterFc := func(from, to uint64) {
-		defer ignoreCloseChannelPanic()
-		log.Println("filterFc:", from, to)
-		opts := &bind.FilterOpts{
-			Start:   from,
-			End:     &to,
-			Context: m.client.ctx,
-		}
-		// ethereum/go-ethereum@v1.13.5/accounts/abi/bind/base.go:434:FilterLogs(opts, name, query...)
-		var iterator any
-		switch len(index) {
-		case 0:
-			iterator = m.Run(filterFcName, opts)[0]
-		case 1:
-			iterator = m.Run(filterFcName, opts, index[0])[0]
-		case 2:
-			iterator = m.Run(filterFcName, opts, index[0], index[1])[0]
-		case 3:
-			iterator = m.Run(filterFcName, opts, index[0], index[1], index[2])[0]
-		default:
-			panic(errors.New("Subscribe::the number of event-indexes don't exceed 3.\n"))
-		}
-		// *TestLogIndex0Iterator, error
-		itValue := reflect.ValueOf(iterator)
-		itNext := itValue.MethodByName("Next")
-		itEvent := itValue.Elem().FieldByName("Event")
-		for {
-			//tl := itEvent.FieldByName("Raw").Interface().(types.Log)
-			if itNext.Call(nil)[0].Interface().(bool) {
-				chMiddle <- itEvent.Interface()
-			} else {
-				return
-			}
-		}
-	}
-	stop := make(chan bool, 1)
-	go func() {
-		tick := time.NewTicker(m.client.miningInterval)
-		defer tick.Stop()
-		_from, _to := BigInt(from).Uint64(), m.client.BlockNumber()
-		for {
-			_from = segmentCallback(_from, _to, m.config, filterFc)
-			_to = m.client.BlockNumber()
-			log.Println("from:", _from, "_to:", _to)
-			select {
-			case <-tick.C:
-			case <-stop:
-				return
-			}
-		}
-	}()
-	chValue := reflect.ValueOf(ch)
-	return event.NewSubscription(func(quit <-chan struct{}) error {
-		defer ignoreCloseChannelPanic()
-		defer close(chMiddle)
-		for {
-			select {
-			case l := <-chMiddle:
-				chValue.Send(reflect.ValueOf(l))
-			case <-quit:
-				stop <- true
-				return nil
-			}
-		}
-	})
 }
 
 // TransactOpts create *bind.TransactOpts, and panic if privateKey err
@@ -965,89 +831,14 @@ func (c *Clientx) Shuffle() {
 	c.it.Shuffle()
 }
 
-type RawLogFilter struct {
-	client    *Clientx
-	addresses []common.Address
-	topics    [][]common.Hash
-	config    EventConfig
-	txHashSet mapset.Set[string]
-	mu        sync.Mutex
-}
-
-type EventConfig struct {
-	IntervalBlocks, OverrideBlocks, DelayBlocks uint64
-}
-
-func (e *EventConfig) panicIfNotValid() {
-	if e.IntervalBlocks == 0 {
-		panic(errors.New("EventConfig::require IntervalBlocks > 0, eg: 800"))
-	}
-	if e.IntervalBlocks+e.OverrideBlocks > 2000 {
-		panic(errors.New("EventConfig::require IntervalBlocks + OverrideBlocks <= 2000, eg: 800 + 800"))
-	}
-	if e.DelayBlocks == 0 {
-		log.Printf("[WARN] EventConfig::If you are tracking the latest logs, DelayBlocks==0 is risky, recommended >= 3. see: https://github.com/ethereum/go-ethereum/blob/master/core/types/log.go#L53")
-	}
-}
-
-// NewRawLogFilter returns the RawLogFilter
-// EventConfig require IntervalBlocks + OverrideBlocks <= 2000, eg: 800,800
-func (c *Clientx) NewRawLogFilter(topics [][]common.Hash, addresses []common.Address, config EventConfig) *RawLogFilter {
-	config.panicIfNotValid()
-	return &RawLogFilter{
-		client:    c,
-		addresses: addresses,
-		topics:    topics,
-		config:    config,
-		txHashSet: mapset.NewThreadUnsafeSet[string](),
-		mu:        sync.Mutex{},
-	}
-}
-
-func (r *RawLogFilter) Run(from, to uint64) (logs []types.Log, addressTopicLogsMap map[common.Address]map[common.Hash][]*types.Log) {
-	fc := func(_from, _to uint64) {
-		// Attention!!!Repeat scanning _to prevent missing blocks
-		var query = ethereum.FilterQuery{
-			Addresses: r.addresses,
-			Topics:    r.topics,
-			FromBlock: new(big.Int).SetUint64(_from),
-			ToBlock:   new(big.Int).SetUint64(_to),
-		}
-		nLogs := r.client.FilterLogs(query)
-		log.Printf("Run: %v(%v)-%v Success!\n", _from, query.FromBlock, _to)
-		if len(nLogs) > 0 {
-			r.mu.Lock()
-			var hashID string
-			for _, nLog := range nLogs {
-				hashID = fmt.Sprintf("%v%v", nLog.TxHash, nLog.Index)
-				if !r.txHashSet.Contains(hashID) {
-					r.txHashSet.Add(hashID)
-					logs = append(logs, nLog)
-				}
-			}
-			r.mu.Unlock()
-		}
-	}
-	segmentCallback(from, to, r.config, fc)
-	addressTopicLogsMap = make(map[common.Address]map[common.Hash][]*types.Log)
-	for _, nLog := range logs {
-		if addressTopicLogsMap[nLog.Address] == nil {
-			addressTopicLogsMap[nLog.Address] = make(map[common.Hash][]*types.Log)
-		}
-		addressTopicLogsMap[nLog.Address][nLog.Topics[0]] = append(addressTopicLogsMap[nLog.Address][nLog.Topics[0]], &nLog)
-	}
-
-	return logs, addressTopicLogsMap
-}
-
 func segmentCallback(from, to uint64, config EventConfig, callback func(from, to uint64)) (newStart uint64) {
 	if from+config.DelayBlocks <= to {
-		// count
+
 		to -= config.DelayBlocks
 		count := (to - from) / config.IntervalBlocks
 		wg := new(sync.WaitGroup)
 		wg.Add(int(count))
-		// loop
+
 		arrest := from + config.OverrideBlocks
 		for i := uint64(0); i < count; i++ {
 			_from := from + i*config.IntervalBlocks
@@ -1060,9 +851,11 @@ func segmentCallback(from, to uint64, config EventConfig, callback func(from, to
 				wg.Done()
 			}()
 		}
+
 		if last := from + count*config.IntervalBlocks; last <= to {
 			callback(last, to)
 		}
+
 		wg.Wait()
 		return to + 1
 	}
