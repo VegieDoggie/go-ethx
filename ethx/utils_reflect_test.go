@@ -2,7 +2,10 @@ package ethx
 
 import (
 	"github.com/stretchr/testify/assert"
+	"log"
+	"math/big"
 	"testing"
+	"time"
 )
 
 type human1 string
@@ -41,4 +44,20 @@ func Test_callStructFunc(t *testing.T) {
 	assert.Equal(t, callFunc(&h2, human2.Name)[0], "A2")
 	assert.Equal(t, callFunc(&h2, new(human2).Name)[0], "A2")
 	assert.Equal(t, callFunc(&h2, "Name")[0], "A2")
+}
+
+func Test_Ptr(t *testing.T) {
+	x := get()
+	log.Println(x)
+	time.Sleep(2 * time.Second)
+	log.Println(x)
+}
+
+func get() (y *big.Int) {
+	y = BigInt(100)
+	go func() {
+		time.Sleep(1 * time.Second)
+		*y = *BigInt(200)
+	}()
+	return y
 }

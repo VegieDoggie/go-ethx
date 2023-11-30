@@ -13,24 +13,24 @@ import (
 )
 
 type RawLogLogger struct {
-	client    *Clientx
-	addresses []common.Address
-	topics    [][]common.Hash
-	config    EventConfig
-	txHashSet mapset.Set[string]
-	mu        sync.Mutex
+	client      *Clientx
+	addresses   []common.Address
+	topics      [][]common.Hash
+	eventConfig EventConfig
+	txHashSet   mapset.Set[string]
+	mu          sync.Mutex
 }
 
 // NewRawLogger returns the RawLogLogger
 // EventConfig require IntervalBlocks + OverrideBlocks <= 2000, eg: 800,800
-func (c *Clientx) NewRawLogger(topics [][]common.Hash, addresses []common.Address, config ...EventConfig) *RawLogLogger {
+func (c *Clientx) NewRawLogger(topics [][]common.Hash, addresses []common.Address, eventConfig ...EventConfig) *RawLogLogger {
 	return &RawLogLogger{
-		client:    c,
-		addresses: addresses,
-		topics:    topics,
-		config:    c.newEventConfig(config),
-		txHashSet: mapset.NewThreadUnsafeSet[string](),
-		mu:        sync.Mutex{},
+		client:      c,
+		addresses:   addresses,
+		topics:      topics,
+		eventConfig: c.newEventConfig(eventConfig),
+		txHashSet:   mapset.NewThreadUnsafeSet[string](),
+		mu:          sync.Mutex{},
 	}
 }
 
@@ -72,7 +72,7 @@ func (r *RawLogLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStar
 		}
 		log.Printf("Filter: [from=%v,to=%v] start... | %v\n", from, to, r.addresses)
 		beforeTime := time.Now()
-		chNewStart <- segmentCallback(from, to, r.config, fc)
+		chNewStart <- segmentCallback(from, to, r.eventConfig, fc)
 		log.Printf("Filter(%v): [from=%v,to=%v] Success! | %v\n", time.Since(beforeTime), from, to, r.addresses)
 	}()
 	return chLogs, chNewStart

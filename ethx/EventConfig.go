@@ -34,6 +34,6 @@ func (e *EventConfig) panicIfNotValid() {
 		panic(errors.New("EventConfig::require IntervalBlocks + OverrideBlocks <= 2000, eg: 800 + 800"))
 	}
 	if e.DelayBlocks == 0 {
-		log.Printf("[WARN] EventConfig::If you are tracking the latest logs, DelayBlocks==0 is risky, recommended >= 3. see: https://github.com/ethereum/go-ethereum/blob/master/core/types/log.go#L53")
+		log.Printf("[WARN] EventConfig::If you are tracking logs, recommended DelayBlocks >= 3 (or risky). see: https://github.com/ethereum/go-ethereum/blob/master/core/types/log.go#L53")
 	}
 }
