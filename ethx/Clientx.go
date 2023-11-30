@@ -50,6 +50,7 @@ func NewSimpleClientx(rpcList []string, concurrency ...int) *Clientx {
 // If weight <= 1, the weight is always 1.
 // Note: If len(weightList) == 0, then default weight = 1 will be active.
 func NewClientx(rpcList []string, weights []int, limiter ...*rate.Limiter) *Clientx {
+	rpcList = mapset.NewThreadUnsafeSet[string](rpcList...).ToSlice()
 	iterator, rpcMap, chainId := buildIterator(rpcList, weights, limiter...)
 	c := &Clientx{
 		ctx:            context.Background(),
@@ -72,9 +73,10 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 		copy(weightList, tmp)
 	}
 
-	var reliableClients []*ethclient.Client
 	clientIterator = new(Iterator[*ethclient.Client])
 	rpcMap = make(map[*ethclient.Client]string)
+
+	var reliableClients []*ethclient.Client
 	update := func(rpc string, client *ethclient.Client, weight int) {
 		rpcMap[client] = rpc
 		reliableClients = append(reliableClients, client)
@@ -83,6 +85,7 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 		}
 		*clientIterator = *NewIterator[*ethclient.Client](reliableClients, limiter...).Shuffle()
 	}
+
 	for i := range rpcList {
 		client, chainId, err := checkChainid(rpcList[i], 3)
 		if err != nil {
@@ -93,15 +96,15 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 			update(rpcList[i], client, weightList[i])
 			go func() {
 				for j := i + 1; j < len(rpcList); j++ {
-					client, chainId, err := checkChainid(rpcList[i], 3)
+					client, chainId, err := checkChainid(rpcList[j], 3)
 					if err != nil {
-						log.Printf("[WARN] buildIterator::Unreliable rpc: %v\n", rpcList[i])
+						log.Printf("[WARN] buildIterator::Unreliable rpc: %v\n", rpcList[j])
 					}
 					if latestChainId.Cmp(chainId) != 0 {
-						log.Printf("[ERROR] rpc(%v) chainID is %v,but rpc(%v) chainId is %v\n", rpcList[i-1], latestChainId, rpcList[i], chainId)
+						log.Printf("[ERROR] chainID already is %v,but rpc(%v) is chainId(%v)\n", latestChainId, rpcList[j], chainId)
 						continue
 					}
-					update(rpcList[i], client, weightList[i])
+					update(rpcList[j], client, weightList[j])
 				}
 			}()
 			break
