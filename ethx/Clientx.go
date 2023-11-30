@@ -86,8 +86,7 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 		*clientIterator = *NewIterator[*ethclient.Client](reliableClients, limiter...).Shuffle()
 	}
 
-	for i := range rpcList {
-		_rpc := rpcList[i]
+	for i, _rpc := range rpcList {
 		client, chainId, err := checkChainid(_rpc, 3)
 		if err != nil {
 			log.Printf("[WARN] buildIterator::Unreliable rpc: %v\n", _rpc)
