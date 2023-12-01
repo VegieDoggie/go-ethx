@@ -17,20 +17,11 @@ import (
 	"time"
 )
 
-var DefaultConfigFor = struct {
-	Event            EventConfig
+type ClientxConfig struct {
+	Event            EventConfig // log filter
 	GasLimit         uint64
 	NotFundBlocks    uint64
 	GasTipAdditional *big.Int
-}{
-	Event: EventConfig{
-		IntervalBlocks: 500,
-		OverrideBlocks: 1000,
-		DelayBlocks:    4,
-	},
-	GasLimit:         8000000,
-	NotFundBlocks:    9,
-	GasTipAdditional: big.NewInt(0),
 }
 
 // Clientx defines typed wrappers for the Ethereum RPC API of a set of the Ethereum Clients.
@@ -42,9 +33,22 @@ type Clientx struct {
 	notFoundBlocks uint64
 	chainId        *big.Int
 	latestHeader   *types.Header
-	stop           chan bool
 	miningInterval time.Duration
 	startedAt      time.Time
+	config         *ClientxConfig
+}
+
+func NewClientxConfig() *ClientxConfig {
+	return &ClientxConfig{
+		Event: EventConfig{
+			IntervalBlocks: 500,
+			OverrideBlocks: 1000,
+			DelayBlocks:    4,
+		},
+		GasLimit:         8000000,
+		NotFundBlocks:    9,
+		GasTipAdditional: big.NewInt(0),
+	}
 }
 
 // NewSimpleClientx create *Clientx
@@ -59,19 +63,19 @@ func NewSimpleClientx(rpcList []string, concurrency ...int) *Clientx {
 	for range rpcList {
 		weights = append(weights, _concurrency)
 	}
-	return NewClientx(rpcList, weights)
+	return NewClientx(rpcList, weights, NewClientxConfig())
 }
 
 // NewClientx connects clients to the given URLs, to provide a reliable Ethereum RPC API call, includes
 // a timer to regularly update block height(AutoBlockNumber).
 // If weight <= 1, the weight is always 1.
 // Note: If len(weightList) == 0, then default weight = 1 will be active.
-func NewClientx(rpcList []string, weights []int, limiter ...*rate.Limiter) *Clientx {
+func NewClientx(rpcList []string, weights []int, config *ClientxConfig, limiter ...*rate.Limiter) *Clientx {
 	rpcList = mapset.NewThreadUnsafeSet[string](rpcList...).ToSlice()
 	iterator, rpcMap, chainId := buildIterator(rpcList, weights, limiter...)
 	notFundBlocks := uint64(len(rpcList) * 2)
-	if notFundBlocks < DefaultConfigFor.NotFundBlocks {
-		notFundBlocks = DefaultConfigFor.NotFundBlocks
+	if notFundBlocks < config.NotFundBlocks {
+		notFundBlocks = config.NotFundBlocks
 	}
 	c := &Clientx{
 		ctx:            context.Background(),
@@ -82,6 +86,7 @@ func NewClientx(rpcList []string, weights []int, limiter ...*rate.Limiter) *Clie
 		notFoundBlocks: notFundBlocks,
 		latestHeader:   &types.Header{Number: BigInt(0)},
 		startedAt:      time.Now(),
+		config:         config,
 	}
 	c.startBackground()
 	return c
@@ -240,7 +245,7 @@ func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
 	} else {
 		opts.GasPrice = c.SuggestGasPrice()
 	}
-	opts.GasLimit = DefaultConfigFor.GasLimit
+	opts.GasLimit = c.config.GasLimit
 	opts.Nonce = BigInt(c.PendingNonceAt(opts.From))
 	return opts
 }
@@ -458,7 +463,7 @@ func (c *Clientx) SuggestGasPrice() (gasPrice *big.Int) {
 			c.errorCallback(client.SuggestGasPrice, client, err)
 			continue
 		}
-		return Add(gasPrice, DefaultConfigFor.GasTipAdditional)
+		return Add(gasPrice, c.config.GasTipAdditional)
 	}
 }
 
@@ -472,7 +477,7 @@ func (c *Clientx) SuggestGasTipCap() (gasTipCap *big.Int) {
 			c.errorCallback(client.SuggestGasTipCap, client, err)
 			continue
 		}
-		return Add(gasTipCap, DefaultConfigFor.GasTipAdditional)
+		return Add(gasTipCap, c.config.GasTipAdditional)
 	}
 }
 

@@ -10,14 +10,14 @@ type EventConfig struct {
 }
 
 func (c *Clientx) newEventConfig(config []EventConfig) EventConfig {
-	var _config EventConfig
+	var eConfig EventConfig
 	if len(config) > 0 {
-		_config = config[0]
-		_config.panicIfNotValid()
+		eConfig = config[0]
+		eConfig.panicIfNotValid()
 	} else {
-		_config = DefaultConfigFor.Event
+		eConfig = c.config.Event
 	}
-	return _config
+	return eConfig
 }
 
 func (e *EventConfig) panicIfNotValid() {
