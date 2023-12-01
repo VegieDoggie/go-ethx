@@ -20,7 +20,7 @@ func (c *Clientx) NewMustContract(constructor any, addressLike any, eventConfig 
 		constructor:     constructor,
 		contractName:    getFuncName(constructor)[3:],
 		contractAddress: Address(addressLike),
-		maxErrNum:       999,
+		maxErrNumR:      999,
 		eventConfig:     c.newEventConfig(eventConfig),
 	}
 }
@@ -30,7 +30,7 @@ type MustContract struct {
 	constructor     any
 	contractName    string
 	contractAddress common.Address
-	maxErrNum       int
+	maxErrNumR      int // for read
 	eventConfig     EventConfig
 }
 
@@ -43,7 +43,7 @@ func (m *MustContract) Read0(f any, args ...any) any {
 // Read from contract safely, return all(not include last error)
 // Attention: missing the first param/*bind.CallOpts is legal
 func (m *MustContract) Read(f any, args ...any) []any {
-	ret, err := m.Call(m.maxErrNum, f, args...)
+	ret, err := m.Call(m.maxErrNumR, f, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -71,7 +71,7 @@ func (m *MustContract) Call(maxErrNum int, f any, args ...any) (ret []any, err e
 		}
 		return ret, nil
 	}
-	return nil, fmt.Errorf("Call::%v exceed maxErrNum(%v), contract=%v, err=%v\n", getFuncName(f), m.maxErrNum, m.contractAddress, err)
+	return nil, fmt.Errorf("Call::%v exceed maxErrNumR(%v), contract=%v, err=%v\n", getFuncName(f), m.maxErrNumR, m.contractAddress, err)
 }
 
 // Subscribe contract event
