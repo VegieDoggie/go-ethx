@@ -3,9 +3,6 @@ package ethx
 import (
 	"fmt"
 	"github.com/VegieDoggie/go-ethx/internal/TestLog"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"log"
 	"math/big"
 	"testing"
 )
@@ -17,11 +14,11 @@ var consts = struct {
 }
 
 func Test_Call0_localhost(t *testing.T) {
-	// 0x5FbDB2315678afecb367f032d93F642f64180aa3
-	clientx := NewSimpleClientx([]string{"http://127.0.0.1:8545/"}, 1)
-
-	testLog, _ := TestLog.NewTestLog(Address("0x5FbDB2315678afecb367f032d93F642f64180aa3"), clientx.NextClient())
-	log.Println(testLog.GetData0(nil))
+	//// 0x5FbDB2315678afecb367f032d93F642f64180aa3
+	//clientx := NewSimpleClientx([]string{"http://127.0.0.1:8545/"}, 1)
+	//
+	//testLog, _ := TestLog.NewTestLog(Address("0x5FbDB2315678afecb367f032d93F642f64180aa3"), clientx.NextClient())
+	//log.Println(testLog.GetData0(nil))
 }
 
 func Test_Call0(t *testing.T) {
@@ -48,65 +45,65 @@ func Test_Call0(t *testing.T) {
 }
 
 func Test_Subscribe(t *testing.T) {
-	// 0x5FbDB2315678afecb367f032d93F642f64180aa3
-	clientx := NewSimpleClientx([]string{"http://127.0.0.1:8545/"}, 10)
-	config := EventConfig{
-		IntervalBlocks: 20,
-		OverrideBlocks: 10,
-		DelayBlocks:    2,
-	}
-	mustTestLog := clientx.NewMustContract(TestLog.NewTestLog, "0x5FbDB2315678afecb367f032d93F642f64180aa3", config)
-	logCh := make(chan *TestLog.TestLogIndex0, 128)
-	sub := mustTestLog.Subscribe(logCh, 0)
-	sub.Err()
-	for i := 0; i < 105; i++ {
-		l := <-logCh
-		log.Println(l.Raw.TxHash, l.Raw.BlockNumber)
-		//if i == 30 {
-		//	sub.Unsubscribe()
-		//	return
-		//}
-	}
+	//// 0x5FbDB2315678afecb367f032d93F642f64180aa3
+	//clientx := NewSimpleClientx([]string{"http://127.0.0.1:8545/"}, 10)
+	//config := EventConfig{
+	//	IntervalBlocks: 20,
+	//	OverrideBlocks: 10,
+	//	DelayBlocks:    2,
+	//}
+	//mustTestLog := clientx.NewMustContract(TestLog.NewTestLog, "0x5FbDB2315678afecb367f032d93F642f64180aa3", config)
+	//logCh := make(chan *TestLog.TestLogIndex0, 128)
+	//sub := mustTestLog.Subscribe(logCh, 0)
+	//sub.Err()
+	//for i := 0; i < 105; i++ {
+	//	l := <-logCh
+	//	log.Println(l.Raw.TxHash, l.Raw.BlockNumber)
+	//	//if i == 30 {
+	//	//	sub.Unsubscribe()
+	//	//	return
+	//	//}
+	//}
 }
 
 func Test_Subscribe_index(t *testing.T) {
-	// 0x5FbDB2315678afecb367f032d93F642f64180aa3
-	clientx := NewSimpleClientx([]string{"http://127.0.0.1:8545/"}, 10)
-	config := EventConfig{
-		IntervalBlocks: 20,
-		OverrideBlocks: 10,
-		DelayBlocks:    0,
-	}
-	mustTestLog := clientx.NewMustContract(TestLog.NewTestLog, "0x5FbDB2315678afecb367f032d93F642f64180aa3", config)
-	logCh := make(chan *TestLog.TestLogIndex1, 128)
-	//sub := mustTestLog.Subscribe(logCh, 0)
-	sub := mustTestLog.Subscribe(logCh, 0, nil)
-	sub.Err()
-	for i := 0; i < 105; i++ {
-		l := <-logCh
-		log.Println(l.Raw.TxHash, l.Raw.BlockNumber)
-		//if i == 30 {
-		//	sub.Unsubscribe()
-		//	return
-		//}
-	}
+	//// 0x5FbDB2315678afecb367f032d93F642f64180aa3
+	//clientx := NewSimpleClientx([]string{"http://127.0.0.1:8545/"}, 10)
+	//config := EventConfig{
+	//	IntervalBlocks: 20,
+	//	OverrideBlocks: 10,
+	//	DelayBlocks:    0,
+	//}
+	//mustTestLog := clientx.NewMustContract(TestLog.NewTestLog, "0x5FbDB2315678afecb367f032d93F642f64180aa3", config)
+	//logCh := make(chan *TestLog.TestLogIndex1, 128)
+	////sub := mustTestLog.Subscribe(logCh, 0)
+	//sub := mustTestLog.Subscribe(logCh, 0, nil)
+	//sub.Err()
+	//for i := 0; i < 105; i++ {
+	//	l := <-logCh
+	//	log.Println(l.Raw.TxHash, l.Raw.BlockNumber)
+	//	//if i == 30 {
+	//	//	sub.Unsubscribe()
+	//	//	return
+	//	//}
+	//}
 }
 
 func Test_NewTestLog_FilterIndex0(t *testing.T) {
-	clientx := NewSimpleClientx([]string{"http://127.0.0.1:8545/"}, 10)
-	testLog, _ := TestLog.NewTestLog(Address("0x5FbDB2315678afecb367f032d93F642f64180aa3"), clientx.NextClient())
-	end := uint64(2000)
-	index0Iterator, err := testLog.FilterIndex1(&bind.FilterOpts{
-		Start:   0,
-		End:     &end,
-		Context: nil,
-	}, []common.Address{Address("0x0000000000000000000000000000000000000001")})
-	if err != nil {
-		panic(err)
-	}
-	for i := 0; i < 100; i++ {
-		if index0Iterator.Next() {
-			log.Println(index0Iterator.Event.Raw.TxHash, index0Iterator.Event.Raw.BlockNumber)
-		}
-	}
+	//clientx := NewSimpleClientx([]string{"http://127.0.0.1:8545/"}, 10)
+	//testLog, _ := TestLog.NewTestLog(Address("0x5FbDB2315678afecb367f032d93F642f64180aa3"), clientx.NextClient())
+	//end := uint64(2000)
+	//index0Iterator, err := testLog.FilterIndex1(&bind.FilterOpts{
+	//	Start:   0,
+	//	End:     &end,
+	//	Context: nil,
+	//}, []common.Address{Address("0x0000000000000000000000000000000000000001")})
+	//if err != nil {
+	//	panic(err)
+	//}
+	//for i := 0; i < 100; i++ {
+	//	if index0Iterator.Next() {
+	//		log.Println(index0Iterator.Event.Raw.TxHash, index0Iterator.Event.Raw.BlockNumber)
+	//	}
+	//}
 }

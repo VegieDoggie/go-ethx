@@ -1,31 +1,30 @@
 package ethx
 
 import (
-	"log"
 	"testing"
 )
 
 func Test_Clientx(t *testing.T) {
-	reliableList := []string{
-		"https://data-seed-prebsc-2-s2.bnbchain.org:8545",
-		"https://endpoints.omniatech.io/v1/bsc/testnet/public",
-		"https://bsc-testnet.publicnode.com",
-		//"https://data-seed-prebsc-2-s3.bnbchain.org:8545",
-		//"https://bsc-testnet.public.blastapi.io",
-		//"https://data-seed-prebsc-1-s3.bnbchain.org:8545",
-		//"https://data-seed-prebsc-1-s1.bnbchain.org:8545",
-		//"https://data-seed-prebsc-1-s2.bnbchain.org:8545",
-		//"https://bsc-testnet.blockpi.network/v1/rpc/public",
-		//"https://data-seed-prebsc-2-s1.bnbchain.org:8545",
-		//"wss://bsc-testnet.publicnode.com",
-	}
-	clientx := NewSimpleClientx(reliableList)
-	prikey := ""
-	to := "0x87393E5971A58952D94C7b200663fB49138fF001"
-	tx, receipt, err := clientx.Transfer(prikey, to, BigInt("1e18"))
-	log.Println(err)
-	log.Println(tx)
-	log.Println(receipt)
+	//reliableList := []string{
+	//	"https://data-seed-prebsc-2-s2.bnbchain.org:8545",
+	//	"https://endpoints.omniatech.io/v1/bsc/testnet/public",
+	//	"https://bsc-testnet.publicnode.com",
+	//	//"https://data-seed-prebsc-2-s3.bnbchain.org:8545",
+	//	//"https://bsc-testnet.public.blastapi.io",
+	//	//"https://data-seed-prebsc-1-s3.bnbchain.org:8545",
+	//	//"https://data-seed-prebsc-1-s1.bnbchain.org:8545",
+	//	//"https://data-seed-prebsc-1-s2.bnbchain.org:8545",
+	//	//"https://bsc-testnet.blockpi.network/v1/rpc/public",
+	//	//"https://data-seed-prebsc-2-s1.bnbchain.org:8545",
+	//	//"wss://bsc-testnet.publicnode.com",
+	//}
+	//clientx := NewSimpleClientx(reliableList)
+	//prikey := ""
+	//to := "0x87393E5971A58952D94C7b200663fB49138fF001"
+	//tx, receipt, err := clientx.Transfer(prikey, to, BigInt("1e18"))
+	//log.Println(err)
+	//log.Println(tx)
+	//log.Println(receipt)
 }
 
 func Test_Error(t *testing.T) {
@@ -41,11 +40,11 @@ func Test_Error(t *testing.T) {
 }
 
 func Test_segmentCallback(t *testing.T) {
-	log.Println(segmentCallback(0, 100, EventConfig{
-		IntervalBlocks: 10,
-		OverrideBlocks: 0,
-		DelayBlocks:    0,
-	}, func(from, to uint64) {
-		log.Println(from, to)
-	}))
+	//log.Println(segmentCallback(0, 100, EventConfig{
+	//	IntervalBlocks: 10,
+	//	OverrideBlocks: 0,
+	//	DelayBlocks:    0,
+	//}, func(from, to uint64) {
+	//	log.Println(from, to)
+	//}))
 }

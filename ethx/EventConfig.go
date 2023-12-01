@@ -5,12 +5,6 @@ import (
 	"log"
 )
 
-var DefaultEventConfig = EventConfig{
-	IntervalBlocks: 500,
-	OverrideBlocks: 1000,
-	DelayBlocks:    4,
-}
-
 type EventConfig struct {
 	IntervalBlocks, OverrideBlocks, DelayBlocks uint64
 }
@@ -21,7 +15,7 @@ func (c *Clientx) newEventConfig(config []EventConfig) EventConfig {
 		_config = config[0]
 		_config.panicIfNotValid()
 	} else {
-		_config = DefaultEventConfig
+		_config = DefaultConfigFor.Event
 	}
 	return _config
 }

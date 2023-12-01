@@ -17,6 +17,20 @@ import (
 	"time"
 )
 
+var DefaultConfigFor = struct {
+	Event            EventConfig
+	GasLimit         uint64
+	GasTipAdditional *big.Int
+}{
+	Event: EventConfig{
+		IntervalBlocks: 500,
+		OverrideBlocks: 1000,
+		DelayBlocks:    4,
+	},
+	GasLimit:         8000000,
+	GasTipAdditional: big.NewInt(0),
+}
+
 // Clientx defines typed wrappers for the Ethereum RPC API of a set of the Ethereum Clients.
 type Clientx struct {
 	it             *Iterator[*ethclient.Client]
@@ -91,7 +105,7 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 	for i, _rpc := range rpcList {
 		client, chainId, err := checkChainid(_rpc, 3)
 		if err != nil {
-			log.Printf("[WARN] buildIterator::Unreliable rpc: %v\n", _rpc)
+			log.Printf("[WARN] buildIterator::%v\n", err)
 		}
 		if latestChainId == nil {
 			latestChainId = chainId
@@ -101,10 +115,10 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 					_rpc = rpcList[j]
 					client, chainId, err = checkChainid(_rpc, 3)
 					if err != nil {
-						log.Printf("[WARN] buildIterator::Unreliable rpc: %v\n", _rpc)
+						log.Printf("[WARN] buildIterator::%v\n", err)
 					}
 					if latestChainId.Cmp(chainId) != 0 {
-						log.Printf("[ERROR] chainID already is %v,but rpc(%v) is chainId(%v)\n", latestChainId, _rpc, chainId)
+						log.Printf("[ERROR] [ABORT] buildIterator::previous chainID is %v,but rpc(%v) is chainId(%v)!\n", latestChainId, _rpc, chainId)
 						continue
 					}
 					update(_rpc, client, weightList[j])
@@ -114,7 +128,7 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 		}
 	}
 	if latestChainId == nil {
-		panic(errors.New(fmt.Sprintf("[ERROR] buildIterator::Unreliable rpc List: %v\n", rpcList)))
+		panic(fmt.Errorf("[ERROR] buildIterator::Unreliable rpc List: %v\n", rpcList))
 	}
 	return clientIterator, rpcMap, latestChainId
 }
@@ -147,7 +161,7 @@ func checkChainid(rpc string, maxErr ...int) (*ethclient.Client, *big.Int, error
 		}
 		return client, chainId, nil
 	}
-	return nil, nil, fmt.Errorf("Unreliable RPC: %v\n", rpc)
+	return nil, nil, fmt.Errorf("unreliable RPC: %v\n", rpc)
 }
 
 func (c *Clientx) UpdateRPCs(newRPCs []string) {
@@ -220,7 +234,7 @@ func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
 	} else {
 		opts.GasPrice = c.SuggestGasPrice()
 	}
-	opts.GasLimit = 8000000
+	opts.GasLimit = DefaultConfigFor.GasLimit
 	opts.Nonce = BigInt(c.PendingNonceAt(opts.From))
 	return opts
 }
@@ -438,7 +452,7 @@ func (c *Clientx) SuggestGasPrice() (gasPrice *big.Int) {
 			c.errorCallback(client.SuggestGasPrice, client, err)
 			continue
 		}
-		return gasPrice
+		return Add(gasPrice, DefaultConfigFor.GasTipAdditional)
 	}
 }
 
@@ -452,7 +466,7 @@ func (c *Clientx) SuggestGasTipCap() (gasTipCap *big.Int) {
 			c.errorCallback(client.SuggestGasTipCap, client, err)
 			continue
 		}
-		return gasTipCap
+		return Add(gasTipCap, DefaultConfigFor.GasTipAdditional)
 	}
 }
 
@@ -866,8 +880,9 @@ func (c *Clientx) WaitDeployed(tx *types.Transaction, confirmBlocks uint64, notF
 	return receipt.ContractAddress, err
 }
 
-func (c *Clientx) Shuffle() {
+func (c *Clientx) Shuffle() *Clientx {
 	c.it.Shuffle()
+	return c
 }
 
 func segmentCallback(from, to uint64, config EventConfig, callback func(from, to uint64)) (newStart uint64) {

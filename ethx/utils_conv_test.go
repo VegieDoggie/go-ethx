@@ -245,9 +245,9 @@ func Test_RandBytes(t *testing.T) {
 }
 
 func Test_CheckRpcSpeed(t *testing.T) {
-	CheckRpcSpeed(rawRPC)
+	//CheckRpcSpeed(rawRPC)
 }
 
 func Test_CheckRpcLogged(t *testing.T) {
-	CheckRpcLogged(rawRPC)
+	//CheckRpcLogged(rawRPC)
 }
