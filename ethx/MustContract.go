@@ -55,15 +55,15 @@ func (m *MustContract) Call(f any, args ...any) []any {
 
 // CallWithErr fit unsafe action, eg: maybe write failed
 // 注意: 如果缺失*bind.CallOpts首参数，则会自动以nil补全 (方便查询)
-func (m *MustContract) CallWithErr(maxErrNum int, f any, args ...any) ([]any, error) {
+func (m *MustContract) CallWithErr(maxErrNum int, f any, args ...any) (ret []any, err error) {
 	for i := 0; i < maxErrNum; i++ {
-		ret, err := m.callContract(f, args...)
+		ret, err = m.callContract(f, args...)
 		if err != nil {
 			continue
 		}
 		return ret, nil
 	}
-	return nil, fmt.Errorf("Call::%v exceed maxErrNum(%v), contract=%v", getFuncName(f), m.maxErrNum, m.contractAddress)
+	return nil, fmt.Errorf("CallWithErr::%v exceed maxErrNum(%v), contract=%v, err=%v\n", getFuncName(f), m.maxErrNum, m.contractAddress, err)
 }
 
 // Subscribe contract event
