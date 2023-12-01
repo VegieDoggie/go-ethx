@@ -34,38 +34,36 @@ type MustContract struct {
 	eventConfig     EventConfig
 }
 
-// Call0 contract func safely
-// 注意: 如果缺失*bind.CallOpts首参数，则会自动以nil补全 (方便查询)
-func (m *MustContract) Call0(f any, args ...any) any {
-	return m.Call(f, args...)[0]
+// Read0 read from contract safely, return first
+// Attention: missing the first param/*bind.CallOpts is legal
+func (m *MustContract) Read0(f any, args ...any) any {
+	return m.Read(f, args...)[0]
 }
 
-// Call contract func safely
-// 注意: 如果缺失*bind.CallOpts首参数，则会自动以nil补全 (方便查询)
-func (m *MustContract) Call(f any, args ...any) []any {
-	for i := 0; i < m.maxErrNum; i++ {
-		ret, err := m.callContract(f, args...)
-		if err != nil {
-			continue
-		}
-		return ret
+// Read from contract safely, return all(not include last error)
+// Attention: missing the first param/*bind.CallOpts is legal
+func (m *MustContract) Read(f any, args ...any) []any {
+	ret, err := m.Call(m.maxErrNum, f, args...)
+	if err != nil {
+		panic(err)
 	}
-	panic(errors.New(fmt.Sprintf("Call::%v exceed maxErrNum(%v), contract=%v", getFuncName(f), m.maxErrNum, m.contractAddress)))
+	return ret
 }
 
-// Call0WithErr fit unsafe action, eg: maybe write failed
-// 注意: 如果缺失*bind.CallOpts首参数，则会自动以nil补全 (方便查询)
-func (m *MustContract) Call0WithErr(maxErrNum int, f any, args ...any) (any, error) {
-	rets, err := m.CallWithErr(maxErrNum, f, args...)
+// Write to contract
+// Attention: missing the first param/*bind.CallOpts is illegal
+func (m *MustContract) Write(maxErrNum int, f any, args ...any) (*types.Transaction, error) {
+	rets, err := m.Call(maxErrNum, f, args...)
 	if err != nil {
 		return nil, err
 	}
-	return rets[0], nil
+	return rets[0].(*types.Transaction), nil
 }
 
-// CallWithErr fit unsafe action, eg: maybe write failed
-// 注意: 如果缺失*bind.CallOpts首参数，则会自动以nil补全 (方便查询)
-func (m *MustContract) CallWithErr(maxErrNum int, f any, args ...any) (ret []any, err error) {
+// Call fit unsafe action, eg: maybe write failed
+// If READ: missing the first param/*bind.CallOpts is legal
+// If WRITE: missing the first param/*bind.CallOpts is illegal
+func (m *MustContract) Call(maxErrNum int, f any, args ...any) (ret []any, err error) {
 	for i := 0; i < maxErrNum; i++ {
 		ret, err = m.callContract(f, args...)
 		if err != nil {
@@ -73,7 +71,7 @@ func (m *MustContract) CallWithErr(maxErrNum int, f any, args ...any) (ret []any
 		}
 		return ret, nil
 	}
-	return nil, fmt.Errorf("CallWithErr::%v exceed maxErrNum(%v), contract=%v, err=%v\n", getFuncName(f), m.maxErrNum, m.contractAddress, err)
+	return nil, fmt.Errorf("Call::%v exceed maxErrNum(%v), contract=%v, err=%v\n", getFuncName(f), m.maxErrNum, m.contractAddress, err)
 }
 
 // Subscribe contract event
@@ -156,13 +154,13 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 			var iterator any
 			switch len(index) {
 			case 0:
-				iterator = m.Call(filterFcName, opts)[0]
+				iterator = m.Read(filterFcName, opts)[0]
 			case 1:
-				iterator = m.Call(filterFcName, opts, index[0])[0]
+				iterator = m.Read(filterFcName, opts, index[0])[0]
 			case 2:
-				iterator = m.Call(filterFcName, opts, index[0], index[1])[0]
+				iterator = m.Read(filterFcName, opts, index[0], index[1])[0]
 			case 3:
-				iterator = m.Call(filterFcName, opts, index[0], index[1], index[2])[0]
+				iterator = m.Read(filterFcName, opts, index[0], index[1], index[2])[0]
 			default:
 				panic(errors.New("Subscribe::the number of event-indexes don't exceed 3.\n"))
 			}

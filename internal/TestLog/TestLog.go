@@ -64,7 +64,7 @@ type TestLogFilterer struct {
 // with pre-set call and transact options.
 type TestLogSession struct {
 	Contract     *TestLog          // Generic contract binding to set the session for
-	CallOpts     bind.CallOpts     // Call options to use throughout this session
+	CallOpts     bind.CallOpts     // Read options to use throughout this session
 	TransactOpts bind.TransactOpts // Transaction auth options to use throughout this session
 }
 
@@ -72,7 +72,7 @@ type TestLogSession struct {
 // with pre-set call options.
 type TestLogCallerSession struct {
 	Contract *TestLogCaller // Generic contract caller binding to set the session for
-	CallOpts bind.CallOpts  // Call options to use throughout this session
+	CallOpts bind.CallOpts  // Read options to use throughout this session
 }
 
 // TestLogTransactorSession is an auto generated write-only Go binding around an Ethereum contract,
