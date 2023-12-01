@@ -20,6 +20,7 @@ import (
 var DefaultConfigFor = struct {
 	Event            EventConfig
 	GasLimit         uint64
+	NotFundBlocks    uint64
 	GasTipAdditional *big.Int
 }{
 	Event: EventConfig{
@@ -28,6 +29,7 @@ var DefaultConfigFor = struct {
 		DelayBlocks:    4,
 	},
 	GasLimit:         8000000,
+	NotFundBlocks:    9,
 	GasTipAdditional: big.NewInt(0),
 }
 
@@ -67,13 +69,17 @@ func NewSimpleClientx(rpcList []string, concurrency ...int) *Clientx {
 func NewClientx(rpcList []string, weights []int, limiter ...*rate.Limiter) *Clientx {
 	rpcList = mapset.NewThreadUnsafeSet[string](rpcList...).ToSlice()
 	iterator, rpcMap, chainId := buildIterator(rpcList, weights, limiter...)
+	notFundBlocks := uint64(len(rpcList) * 2)
+	if notFundBlocks < DefaultConfigFor.NotFundBlocks {
+		notFundBlocks = DefaultConfigFor.NotFundBlocks
+	}
 	c := &Clientx{
 		ctx:            context.Background(),
 		it:             iterator,
 		rpcMap:         rpcMap,
 		chainId:        chainId,
 		rpcErrCountMap: make(map[*ethclient.Client]uint),
-		notFoundBlocks: uint64(len(rpcList) * 2),
+		notFoundBlocks: notFundBlocks,
 		latestHeader:   &types.Header{Number: BigInt(0)},
 		startedAt:      time.Now(),
 	}
