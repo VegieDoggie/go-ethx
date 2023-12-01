@@ -14,14 +14,15 @@ import (
 )
 
 // NewMustContract is safe contract caller
-func (c *Clientx) NewMustContract(constructor any, addressLike any, eventConfig ...EventConfig) *MustContract {
+// TODO config ...EventConfig 改成全局配置
+// TODO maxErrNumW:3
+func (c *Clientx) NewMustContract(constructor any, addressLike any, config ...*ClientxConfig) *MustContract {
 	return &MustContract{
 		client:          c,
 		constructor:     constructor,
 		contractName:    getFuncName(constructor)[3:],
 		contractAddress: Address(addressLike),
-		maxErrNumR:      999,
-		eventConfig:     c.newEventConfig(eventConfig),
+		config:          c.mustClientxConfig(config),
 	}
 }
 
@@ -30,8 +31,7 @@ type MustContract struct {
 	constructor     any
 	contractName    string
 	contractAddress common.Address
-	maxErrNumR      int // for read
-	eventConfig     EventConfig
+	config          *ClientxConfig
 }
 
 // Read0 read from contract safely, return first
@@ -43,7 +43,7 @@ func (m *MustContract) Read0(f any, args ...any) any {
 // Read from contract safely, return all(not include last error)
 // Attention: missing the first param/*bind.CallOpts is legal
 func (m *MustContract) Read(f any, args ...any) []any {
-	ret, err := m.Call(m.maxErrNumR, f, args...)
+	ret, err := m.Call(m.config.MaxMustErrNumR, f, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -52,12 +52,24 @@ func (m *MustContract) Read(f any, args ...any) []any {
 
 // Write to contract
 // Attention: missing the first param/*bind.CallOpts is illegal
-func (m *MustContract) Write(maxErrNum int, f any, args ...any) (*types.Transaction, error) {
-	rets, err := m.Call(maxErrNum, f, args...)
+func (m *MustContract) Write(f any, args ...any) (*types.Transaction, error) {
+	rets, err := m.Call(m.config.MaxMustErrNumW, f, args...)
 	if err != nil {
 		return nil, err
 	}
 	return rets[0].(*types.Transaction), nil
+}
+
+// WriteWithPrivateKey to contract
+// Attention: missing the first param/*bind.CallOpts is illegal
+func (m *MustContract) WriteWithPrivateKey(privateKey, f any, args ...any) (*types.Transaction, error) {
+	// TODO 构造Opts
+	//rets, err := m.Call(m.config.MaxMustErrNumW, f, args...)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//return rets[0].(*types.Transaction), nil
+	return nil, nil
 }
 
 // Call fit unsafe action, eg: maybe write failed
@@ -71,7 +83,7 @@ func (m *MustContract) Call(maxErrNum int, f any, args ...any) (ret []any, err e
 		}
 		return ret, nil
 	}
-	return nil, fmt.Errorf("Call::%v exceed maxErrNumR(%v), contract=%v, err=%v\n", getFuncName(f), m.maxErrNumR, m.contractAddress, err)
+	return nil, fmt.Errorf("Call::%v exceed maxErrNumR(%v), contract=%v, err=%v\n", getFuncName(f), maxErrNum, m.contractAddress, err)
 }
 
 // Subscribe contract event
@@ -186,7 +198,7 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 		}
 		_from, _to := from, m.client.BlockNumber()
 		for {
-			_from = segmentCallback(_from, _to, m.eventConfig, filterFc)
+			_from = segmentCallback(_from, _to, m.config.Event, filterFc)
 			_to = m.client.BlockNumber()
 			log.Println("from:", _from, "_to:", _to)
 			select {

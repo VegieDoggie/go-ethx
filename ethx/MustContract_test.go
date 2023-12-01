@@ -31,11 +31,10 @@ func Test_Call0(t *testing.T) {
 		panic(fmt.Errorf("GetData0"))
 	}
 
-	config := EventConfig{
-		IntervalBlocks: 20,
-		OverrideBlocks: 10,
-		DelayBlocks:    2,
-	}
+	config := NewClientxConfig()
+	config.Event.IntervalBlocks = 20
+	config.Event.OverrideBlocks = 20
+	config.Event.DelayBlocks = 2
 	mustTestLog := clientx.NewMustContract(TestLog.NewTestLog, testLogAddr, config)
 	if mustTestLog.Read0(consts.TestLog.GetData0).(*big.Int).Cmp(BigInt(100)) != 0 {
 		panic(fmt.Errorf("GetData0"))

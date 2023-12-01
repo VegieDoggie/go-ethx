@@ -9,15 +9,15 @@ type EventConfig struct {
 	IntervalBlocks, OverrideBlocks, DelayBlocks uint64
 }
 
-func (c *Clientx) newEventConfig(config []EventConfig) EventConfig {
-	var eConfig EventConfig
+func (c *Clientx) mustClientxConfig(config []*ClientxConfig) *ClientxConfig {
+	var cfg *ClientxConfig
 	if len(config) > 0 {
-		eConfig = config[0]
-		eConfig.panicIfNotValid()
+		cfg = config[0]
+		cfg.Event.panicIfNotValid()
 	} else {
-		eConfig = c.config.Event
+		cfg = c.config
 	}
-	return eConfig
+	return cfg
 }
 
 func (e *EventConfig) panicIfNotValid() {

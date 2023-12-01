@@ -12,25 +12,25 @@ import (
 	"time"
 )
 
-type RawLogLogger struct {
-	client      *Clientx
-	addresses   []common.Address
-	topics      [][]common.Hash
-	eventConfig EventConfig
-	txHashSet   mapset.Set[string]
-	mu          sync.Mutex
+type RawLogger struct {
+	client    *Clientx
+	addresses []common.Address
+	topics    [][]common.Hash
+	config    *ClientxConfig
+	txHashSet mapset.Set[string]
+	mu        sync.Mutex
 }
 
-// NewRawLogger returns the RawLogLogger
+// NewRawLogger returns the RawLogger
 // EventConfig require IntervalBlocks + OverrideBlocks <= 2000, eg: 800,800
-func (c *Clientx) NewRawLogger(topics [][]common.Hash, addresses []common.Address, eventConfig ...EventConfig) *RawLogLogger {
-	return &RawLogLogger{
-		client:      c,
-		addresses:   addresses,
-		topics:      topics,
-		eventConfig: c.newEventConfig(eventConfig),
-		txHashSet:   mapset.NewThreadUnsafeSet[string](),
-		mu:          sync.Mutex{},
+func (c *Clientx) NewRawLogger(topics [][]common.Hash, addresses []common.Address, eventConfig ...*ClientxConfig) *RawLogger {
+	return &RawLogger{
+		client:    c,
+		addresses: addresses,
+		topics:    topics,
+		config:    c.mustClientxConfig(eventConfig),
+		txHashSet: mapset.NewThreadUnsafeSet[string](),
+		mu:        sync.Mutex{},
 	}
 }
 
@@ -43,7 +43,7 @@ func (c *Clientx) NewRawLogger(topics [][]common.Hash, addresses []common.Addres
 //
 // // DO 2: get next turn new start/from
 // chNewStart := <-chNewStart
-func (r *RawLogLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart chan uint64) {
+func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart chan uint64) {
 	chLogs = make(chan types.Log, 128)
 	chNewStart = make(chan uint64, 1)
 	go func() {
@@ -72,7 +72,7 @@ func (r *RawLogLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStar
 		}
 		log.Printf("Filter: [from=%v,to=%v] start... | %v\n", from, to, r.addresses)
 		beforeTime := time.Now()
-		chNewStart <- segmentCallback(from, to, r.eventConfig, fc)
+		chNewStart <- segmentCallback(from, to, r.config.Event, fc)
 		log.Printf("Filter(%v): [from=%v,to=%v] Success! | %v\n", time.Since(beforeTime), from, to, r.addresses)
 	}()
 	return chLogs, chNewStart

@@ -18,10 +18,12 @@ import (
 )
 
 type ClientxConfig struct {
-	Event            EventConfig // log filter
-	GasLimit         uint64
-	NotFundBlocks    uint64
-	GasTipAdditional *big.Int
+	Event            EventConfig // MustContract and RawLogger
+	GasLimit         uint64      // Clientx
+	NotFundBlocks    uint64      // Clientx
+	GasTipAdditional *big.Int    // Clientx
+	MaxMustErrNumR   int         // MustContract
+	MaxMustErrNumW   int         // MustContract
 }
 
 // Clientx defines typed wrappers for the Ethereum RPC API of a set of the Ethereum Clients.
@@ -47,6 +49,8 @@ func NewClientxConfig() *ClientxConfig {
 		},
 		GasLimit:         8000000,
 		NotFundBlocks:    9,
+		MaxMustErrNumR:   999,
+		MaxMustErrNumW:   3,
 		GasTipAdditional: big.NewInt(0),
 	}
 }
