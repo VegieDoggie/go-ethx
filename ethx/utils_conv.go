@@ -22,20 +22,28 @@ import (
 )
 
 // Hash hashLike is non-nil
+// Attention: str without 0x will be treated as hex, eg: "10" => 0x10.
 func Hash(hashLike any) common.Hash {
 	if hashLike == nil {
 		return common.Hash{}
+	}
+	if str, ok := hashLike.(string); ok && !Is0x(str) {
+		return common.HexToHash(str)
 	}
 	return common.BigToHash(BigInt(hashLike))
 }
 
 // Address addressLike is non-nil
+// Attention: str without 0x will be treated as hex, eg: "10" => 0x10.
 func Address(addressLike any, isPri ...bool) common.Address {
 	if addressLike == nil {
 		return common.Address{}
 	}
 	if len(isPri) > 0 && isPri[0] {
 		return crypto.PubkeyToAddress(PrivateKey(addressLike).PublicKey)
+	}
+	if str, ok := addressLike.(string); ok && !Is0x(str) {
+		return common.HexToAddress(str)
 	}
 	return common.BigToAddress(BigInt(addressLike))
 }
@@ -96,6 +104,8 @@ var (
 	bigInt10 = big.NewInt(10)
 )
 
+// BigInt
+// Attention: str without 0x will be treated as decimal, eg: "10" => 10.
 func BigInt(numLike any) *big.Int {
 	if numLike == nil {
 		return nil

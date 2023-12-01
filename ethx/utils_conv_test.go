@@ -64,6 +64,7 @@ func Test_Hash(t *testing.T) {
 }
 
 func Test_Address(t *testing.T) {
+	assert.Equal(t, Address("a").Hex(), "0x000000000000000000000000000000000000000A")
 	expect := common.HexToAddress("0x1")
 	decode, err := hex.DecodeString("01")
 	if err != nil {
