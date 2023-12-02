@@ -23,7 +23,9 @@ type RawLogger struct {
 
 // NewRawLogger returns the RawLogger
 // EventConfig require IntervalBlocks + OverrideBlocks <= 2000, eg: 800,800
-func (c *Clientx) NewRawLogger(topics [][]common.Hash, addresses []common.Address, eventConfig ...*ClientxConfig) *RawLogger {
+// addresses []common.Address : optional, could be nil
+// topics topics [][]common.Hash : optional, could be nil
+func (c *Clientx) NewRawLogger(addresses []common.Address, topics [][]common.Hash, eventConfig ...*ClientxConfig) *RawLogger {
 	return &RawLogger{
 		client:    c,
 		addresses: addresses,
@@ -35,7 +37,7 @@ func (c *Clientx) NewRawLogger(topics [][]common.Hash, addresses []common.Addres
 }
 
 // Filter get logs from any blocks range, eg: (0, 10000000)
-// (chLogs chan types.Log, chNewStart chan uint64) :
+// Example Usage :
 //
 //	for l := range chLogs {
 //		// DO 1: log handle
@@ -44,7 +46,7 @@ func (c *Clientx) NewRawLogger(topics [][]common.Hash, addresses []common.Addres
 // // DO 2: get next turn new start/from
 // chNewStart := <-chNewStart
 func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart chan uint64) {
-	chLogs = make(chan types.Log, 128)
+	chLogs = make(chan types.Log, 1)
 	chNewStart = make(chan uint64, 1)
 	go func() {
 		defer close(chLogs)
@@ -64,7 +66,7 @@ func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart c
 					hashID = fmt.Sprintf("%v%v", nLog.TxHash, nLog.Index)
 					if !r.txHashSet.Contains(hashID) {
 						r.txHashSet.Add(hashID)
-						chLogs <- nLog
+						//chLogs <- nLog
 					}
 				}
 				r.mu.Unlock()

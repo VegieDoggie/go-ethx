@@ -14,8 +14,6 @@ import (
 )
 
 // NewMustContract is safe contract caller
-// TODO config ...EventConfig 改成全局配置
-// TODO maxErrNumW:3
 func (c *Clientx) NewMustContract(constructor any, addressLike any, config ...*ClientxConfig) *MustContract {
 	return &MustContract{
 		client:          c,
@@ -137,7 +135,7 @@ func (m *MustContract) callContract(f any, args ...any) ([]any, error) {
 }
 
 func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (chEvent chan any, stop chan bool) {
-	chEvent, stop = make(chan any, 128), make(chan bool, 1)
+	chEvent, stop = make(chan any, 512), make(chan bool, 1)
 	go func() {
 		tick := time.NewTicker(m.client.miningInterval)
 		defer tick.Stop()
@@ -146,6 +144,7 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 		// reflect.TypeOf(m.constructor).Out(0) : *TestLog.TestLog
 		// reflect.New(reflect.TypeOf(m.constructor).Out(0).Elem()) : new(TestLog.TestLog)
 		// reflect.New(reflect.TypeOf(m.constructor).Out(0).Elem()).MethodByName(filterFcName).Type() : func(*bind.FilterOpts, []common.Address) (*TestLog.TestLogIndex1Iterator, error)
+		// 过滤参数自动补全
 		paramNum := reflect.New(reflect.TypeOf(m.constructor).Out(0).Elem()).MethodByName(filterFcName).Type().NumIn()
 		if diff := paramNum - len(index); diff > 1 {
 			for i := 1; i < diff; i++ {
