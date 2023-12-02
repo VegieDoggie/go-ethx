@@ -46,7 +46,7 @@ func (c *Clientx) NewRawLogger(addresses []common.Address, topics [][]common.Has
 // // DO 2: get next turn new start/from
 // chNewStart := <-chNewStart
 func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart chan uint64) {
-	chLogs = make(chan types.Log, 1)
+	chLogs = make(chan types.Log)
 	chNewStart = make(chan uint64, 1)
 	go func() {
 		defer close(chLogs)
@@ -66,7 +66,7 @@ func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart c
 					hashID = fmt.Sprintf("%v%v", nLog.TxHash, nLog.Index)
 					if !r.txHashSet.Contains(hashID) {
 						r.txHashSet.Add(hashID)
-						//chLogs <- nLog
+						chLogs <- nLog
 					}
 				}
 				r.mu.Unlock()
