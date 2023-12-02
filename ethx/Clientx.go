@@ -200,7 +200,7 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 				log.Printf("[WARN] UpdateRPCs::Unreliable rpc: %v\n", rpc)
 			}
 			if c.chainId.Cmp(chainId) != 0 {
-				log.Println(fmt.Sprintf("[WARN] UpdateRPCs::required chainID is %v,but rpc(%v) chainId is %v\n", c.chainId, rpc, chainId))
+				log.Printf("[WARN] UpdateRPCs::required chainID is %v,but rpc(%v) chainId is %v\n", c.chainId, rpc, chainId)
 				continue
 			}
 			updated = true
@@ -232,7 +232,18 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 
 func (c *Clientx) errorCallback(f any, client *ethclient.Client, err error) {
 	c.rpcErrCountMap[client]++
-	log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
+	prefix := err.Error()
+	if len(prefix) > 3 {
+		prefix = prefix[:3]
+	}
+	switch prefix {
+	case "429", "521":
+		if c.rpcErrCountMap[client]%10 == 0 {
+			log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], "BUSY!")
+		}
+	default:
+		log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
+	}
 }
 
 // TransactOpts create *bind.TransactOpts, and panic if privateKey err
