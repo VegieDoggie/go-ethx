@@ -36,9 +36,9 @@ func callStructMethod(structInstance any, f any, args ...any) []any {
 var (
 	callOptsPtrType = reflect.TypeOf(new(bind.CallOpts))
 	bigIntPtrType   = reflect.TypeOf(new(big.Int))
-	addressType     = reflect.TypeOf(common.Address{})
+	addressType     = reflect.TypeOf(common.Address{}) // include [20]byte
 	addressPtrType  = reflect.TypeOf(new(common.Address))
-	hashType        = reflect.TypeOf(common.Hash{})
+	hashType        = reflect.TypeOf(common.Hash{}) // include [32]byte
 	hashPtrType     = reflect.TypeOf(new(common.Hash))
 )
 

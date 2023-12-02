@@ -131,6 +131,7 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 					client, chainId, err = checkChainid(_rpc, 3)
 					if err != nil {
 						log.Printf("[WARN] buildIterator::%v\n", err)
+						continue
 					}
 					if latestChainId.Cmp(chainId) != 0 {
 						log.Printf("[ERROR] [ABORT] buildIterator::previous chainID is %v,but rpc(%v) is chainId(%v)!\n", latestChainId, _rpc, chainId)
