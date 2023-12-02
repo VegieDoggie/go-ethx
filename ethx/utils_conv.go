@@ -407,13 +407,7 @@ func PrivateKey(priLike any) *ecdsa.PrivateKey {
 	case *ecdsa.PrivateKey:
 		return value
 	}
-	var privateStr string
-	if value, ok := priLike.(string); ok && len(value) == 64 && !Is0x(value) {
-		privateStr = value
-	} else {
-		privateStr = common.BigToHash(BigInt(priLike)).Hex()[2:]
-	}
-	privateKey, err := crypto.HexToECDSA(privateStr)
+	privateKey, err := crypto.HexToECDSA(Hash(priLike).Hex()[2:])
 	if err != nil {
 		panic(err)
 	}

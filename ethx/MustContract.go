@@ -60,16 +60,15 @@ func (m *MustContract) Write(f any, args ...any) (*types.Transaction, error) {
 	return rets[0].(*types.Transaction), nil
 }
 
-// WriteWithPrivateKey to contract
-// Attention: missing the first param/*bind.CallOpts is illegal
+// WriteWithPrivateKey to contract, don't pass *bind.TransactOpts
 func (m *MustContract) WriteWithPrivateKey(privateKey, f any, args ...any) (*types.Transaction, error) {
-	// TODO 构造Opts
-	//rets, err := m.Call(m.config.MaxMustErrNumW, f, args...)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//return rets[0].(*types.Transaction), nil
-	return nil, nil
+	opts := m.client.TransactOpts(privateKey)
+	args = append([]any{opts}, opts)
+	rets, err := m.Call(m.config.MaxMustErrNumW, f, args...)
+	if err != nil {
+		return nil, err
+	}
+	return rets[0].(*types.Transaction), nil
 }
 
 // Call fit unsafe action, eg: maybe write failed
