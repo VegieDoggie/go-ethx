@@ -920,7 +920,7 @@ func segmentCallback(from, to uint64, config EventConfig, callback func(from, to
 
 		wg := new(sync.WaitGroup)
 		arrest := from + config.OverrideBlocks
-		for i := uint64(0); i < count; i++ {
+		for i := uint64(0); i < count; {
 			wg.Add(1)
 			_from := from + i*config.IntervalBlocks
 			_to := _from + config.IntervalBlocks - 1
@@ -931,7 +931,8 @@ func segmentCallback(from, to uint64, config EventConfig, callback func(from, to
 				callback(_from, _to)
 				wg.Done()
 			}()
-			if (i+1)%128 == 0 {
+			i++
+			if i%128 == 0 {
 				wg.Wait()
 			}
 		}
