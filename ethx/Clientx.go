@@ -233,7 +233,7 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 func (c *Clientx) errorCallback(f any, client *ethclient.Client, err error) {
 	c.rpcErrCountMap[client]++
 	prefix := err.Error()
-	if len(prefix) > 3 {
+	if len(prefix) > 2 {
 		prefix = prefix[:3]
 	}
 	switch prefix {
