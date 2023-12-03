@@ -85,7 +85,7 @@ func (m *MustContract) Call(maxErrNum int, f any, args ...any) (ret []any, err e
 
 // Subscribe contract event
 // eventName is from ch, so just pass ch!
-func (m *MustContract) Subscribe(ch any, from any, index ...any) (sub event.Subscription) {
+func (m *MustContract) Subscribe(ch any, from any, index ...any) (sub event.Subscription, blockNumber chan uint64) {
 	chType := reflect.TypeOf(ch)
 	if chType.Kind() != reflect.Chan {
 		panic(fmt.Errorf("Subscribe::`ch` param not `chan`!\n"))
@@ -99,7 +99,7 @@ func (m *MustContract) Subscribe(ch any, from any, index ...any) (sub event.Subs
 		panic(fmt.Errorf("Subscribe::`ch` param not `chan pointer struct`!\n"))
 	}
 	eventName := chPtrEnumType.Name()[len(m.contractName):]
-	chEvent, stop := m.subscribe(BigInt(from).Uint64(), eventName, index...)
+	chEvent, blockNumber, stop := m.subscribe(BigInt(from).Uint64(), eventName, index...)
 	return event.NewSubscription(func(quit <-chan struct{}) error {
 		defer m.ignoreCloseChannelPanic()
 		defer close(chEvent)
@@ -114,7 +114,7 @@ func (m *MustContract) Subscribe(ch any, from any, index ...any) (sub event.Subs
 				return nil
 			}
 		}
-	})
+	}), blockNumber
 }
 
 func (m *MustContract) callContract(f any, args ...any) ([]any, error) {
@@ -134,8 +134,8 @@ func (m *MustContract) callContract(f any, args ...any) ([]any, error) {
 	return nil, nil
 }
 
-func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (chEvent chan any, stop chan bool) {
-	chEvent, stop = make(chan any, 512), make(chan bool, 1)
+func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (chEvent chan any, blockNumber chan uint64, stop chan bool) {
+	chEvent, blockNumber, stop = make(chan any, 512), make(chan uint64), make(chan bool, 1)
 	go func() {
 		tick := time.NewTicker(m.client.miningInterval)
 		defer tick.Stop()
@@ -194,9 +194,13 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 				}
 			}
 		}
+
 		_from, _to := from, m.client.BlockNumber()
 		for {
 			_from = segmentCallback(_from, _to, m.config.Event, filterFc)
+			go func() {
+				blockNumber <- _from
+			}()
 			_to = m.client.BlockNumber()
 			log.Println("from:", _from, "_to:", _to)
 			select {
@@ -208,7 +212,7 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 		}
 	}()
 
-	return chEvent, stop
+	return chEvent, blockNumber, stop
 }
 
 func (m *MustContract) ignoreCloseChannelPanic() {
