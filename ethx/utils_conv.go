@@ -194,7 +194,7 @@ func stringBig(value string) *big.Int {
 		for i := range value {
 			switch value[i] {
 			case 'e', 'E':
-				return Mul(value[:i], new(big.Int).Exp(bigInt10, _stringBig(value[i+1:], 10), nil))
+				return new(big.Int).Mul(_stringBig(value[:i], 10), new(big.Int).Exp(bigInt10, _stringBig(value[i+1:], 10), nil))
 			}
 		}
 		return _stringBig(value, 10)
