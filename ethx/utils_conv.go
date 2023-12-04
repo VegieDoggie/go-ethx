@@ -177,8 +177,7 @@ func BigInt(numLike any) *big.Int {
 		case reflect.Pointer, reflect.UnsafePointer:
 			return BigInt(rv.Elem().Interface())
 		}
-		log.Panicf("Unknown numLike: %v", value)
-		return nil
+		panic(fmt.Errorf("Unknown numLike: %v\n", value))
 	}
 }
 
