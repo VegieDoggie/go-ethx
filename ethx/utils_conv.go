@@ -115,12 +115,16 @@ func BigInt(numLike any) *big.Int {
 		return value
 	case common.Address:
 		return value.Big()
+	case [32]byte:
+		return (common.Hash)(value).Big()
 	case common.Hash:
 		return value.Big()
 	case *common.Address:
 		return value.Big()
 	case *common.Hash:
 		return value.Big()
+	case [20]byte:
+		return (common.Address)(value).Big()
 	case []byte:
 		s := string(value)
 		switch {
