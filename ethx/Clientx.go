@@ -334,7 +334,7 @@ func (c *Clientx) unsignedTx(privateKeyLike, to, amount any, options ...Transfer
 	return tx, opts
 }
 
-func (c *Clientx) TransferAll(privateKeyLike, to any) (receipt *types.Receipt, err error) {
+func (c *Clientx) TransferAll(privateKeyLike, to any) (tx *types.Transaction, err error) {
 	opts := c.TransactOpts(privateKeyLike)
 	opts.GasLimit = 21001
 	var gasCost *big.Int
@@ -355,15 +355,12 @@ func (c *Clientx) TransferAll(privateKeyLike, to any) (receipt *types.Receipt, e
 // Transfer build transaction and send
 // TransferOption is optional.
 // see more: github.com/ethereum/go-ethereum/internal/ethapi/transaction_args.go:284
-func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOption) (receipt *types.Receipt, err error) {
+func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOption) (tx *types.Transaction, err error) {
 	tx, opts := c.unsignedTx(privateKeyLike, to, amount, options...)
 	if tx, err = c.send(tx, opts); err != nil {
 		return nil, err
 	}
-	if receipt, err = c.WaitMined(tx, 1); err != nil {
-		return nil, err
-	}
-	return receipt, nil
+	return tx, nil
 }
 
 func (c *Clientx) send(tx *types.Transaction, opts *bind.TransactOpts) (signedTx *types.Transaction, err error) {
