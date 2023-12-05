@@ -13,6 +13,7 @@ import (
 	"golang.org/x/time/rate"
 	"log"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 )
@@ -38,6 +39,7 @@ type Clientx struct {
 	miningInterval time.Duration
 	startedAt      time.Time
 	config         *ClientxConfig
+	non1559Gas     bool
 }
 
 func NewClientxConfig() *ClientxConfig {
@@ -91,6 +93,7 @@ func NewClientx(rpcList []string, weights []int, config *ClientxConfig, limiter 
 		latestHeader:   &types.Header{Number: BigInt(0)},
 		startedAt:      time.Now(),
 		config:         config,
+		miningInterval: time.Second, // min
 	}
 	c.startBackground()
 	return c
@@ -121,6 +124,7 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 		client, chainId, err := checkChainid(_rpc, 3)
 		if err != nil {
 			log.Printf("[WARN] buildIterator::%v\n", err)
+			continue
 		}
 		if latestChainId == nil {
 			latestChainId = chainId
@@ -254,15 +258,25 @@ func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
 	if err != nil {
 		panic(err)
 	}
-	if c.latestHeader.BaseFee != nil {
-		gasTipCap := c.SuggestGasTipCap()
-		opts.GasFeeCap = Add(Mul(c.latestHeader.BaseFee, 2), gasTipCap)
-		opts.GasTipCap = gasTipCap
-	} else {
-		opts.GasPrice = c.SuggestGasPrice()
-	}
-	opts.GasLimit = c.config.GasLimit
-	opts.Nonce = BigInt(c.PendingNonceAt(opts.From))
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		if c.latestHeader.BaseFee != nil {
+			log.Println("c.latestHeader.BaseFee", c.latestHeader.BaseFee)
+			gasTipCap := c.SuggestGasTipCap()
+			opts.GasFeeCap = Add(Mul(c.latestHeader.BaseFee, 2), gasTipCap)
+			opts.GasTipCap = gasTipCap
+		} else {
+			opts.GasPrice = c.SuggestGasPrice()
+		}
+		opts.GasLimit = c.config.GasLimit
+		wg.Done()
+	}()
+	go func() {
+		opts.Nonce = BigInt(c.PendingNonceAt(opts.From))
+		wg.Done()
+	}()
+	wg.Wait()
 	return opts
 }
 
@@ -272,27 +286,21 @@ type TransferOption struct {
 	Opts       *bind.TransactOpts // option
 }
 
-// Transfer build transaction and send
-// TransferOption is optional.
-// see more: github.com/ethereum/go-ethereum/internal/ethapi/transaction_args.go:284
-func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOption) (tx *types.Transaction, receipt *types.Receipt, err error) {
-	_privateKey := PrivateKey(privateKeyLike)
+func (c *Clientx) unsignedTx(privateKeyLike, to, amount any, options ...TransferOption) (tx *types.Transaction, opts *bind.TransactOpts) {
 	var data []byte
 	var accessList types.AccessList
-	var opts *bind.TransactOpts
 	if len(options) > 0 {
 		data = options[0].data
 		accessList = options[0].AccessList
 		opts = options[0].Opts
 	}
 	if opts == nil {
-		opts = c.TransactOpts(_privateKey)
+		opts = c.TransactOpts(privateKeyLike)
 	}
-	_to := Address(to)
 	switch {
 	case opts.GasFeeCap != nil:
 		tx = types.NewTx(&types.DynamicFeeTx{
-			To:         &_to,
+			To:         AddressPtr(to),
 			ChainID:    c.chainId,
 			Nonce:      opts.Nonce.Uint64(),
 			Gas:        opts.GasLimit,
@@ -304,7 +312,7 @@ func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOp
 		})
 	case accessList != nil:
 		tx = types.NewTx(&types.AccessListTx{
-			To:         &_to,
+			To:         AddressPtr(to),
 			ChainID:    c.chainId,
 			Nonce:      opts.Nonce.Uint64(),
 			Gas:        opts.GasLimit,
@@ -315,7 +323,7 @@ func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOp
 		})
 	default:
 		tx = types.NewTx(&types.LegacyTx{
-			To:       &_to,
+			To:       AddressPtr(to),
 			Nonce:    opts.Nonce.Uint64(),
 			Gas:      opts.GasLimit,
 			GasPrice: opts.GasPrice,
@@ -323,35 +331,71 @@ func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOp
 			Data:     data,
 		})
 	}
+	return tx, opts
+}
+
+func (c *Clientx) TransferAll(privateKeyLike, to any) (receipt *types.Receipt, err error) {
+	opts := c.TransactOpts(privateKeyLike)
+	opts.GasLimit = 21001
+	var gasCost *big.Int
+	switch {
+	case opts.GasFeeCap != nil:
+		gasCost = Mul(opts.GasFeeCap, opts.GasLimit)
+	default:
+		gasCost = Mul(opts.GasPrice, opts.GasLimit)
+	}
+	balance := c.BalanceAt(Address(privateKeyLike, true))
+	if Lte(balance, gasCost) {
+		return nil, fmt.Errorf("Insufficient funds\n")
+	}
+	amount := Sub(balance, gasCost)
+	return c.Transfer(privateKeyLike, to, amount, TransferOption{Opts: opts})
+}
+
+// Transfer build transaction and send
+// TransferOption is optional.
+// see more: github.com/ethereum/go-ethereum/internal/ethapi/transaction_args.go:284
+func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOption) (receipt *types.Receipt, err error) {
+	tx, opts := c.unsignedTx(privateKeyLike, to, amount, options...)
+	if tx, err = c.send(tx, opts); err != nil {
+		return nil, err
+	}
+	if receipt, err = c.WaitMined(tx, 1); err != nil {
+		return nil, err
+	}
+	return receipt, nil
+}
+
+func (c *Clientx) send(tx *types.Transaction, opts *bind.TransactOpts) (signedTx *types.Transaction, err error) {
 	if tx, err = opts.Signer(opts.From, tx); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	gasLimit, err := c.EstimateGas(CallMsg(opts.From, tx), len(c.rpcMap))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if opts.GasLimit < gasLimit || gasLimit == 0 {
-		return tx, nil, errors.New(fmt.Sprintf("[ERROR] Transfer::Gas required %v, but %v.\n", gasLimit, opts.GasLimit))
+		return nil, errors.New(fmt.Sprintf("[ERROR] Transfer::Gas required %v, but %v.\n", gasLimit, opts.GasLimit))
 	}
 	if err = c.SendTransaction(tx, len(c.rpcMap)); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	if receipt, err = c.WaitMined(tx, 1); err != nil {
-		return nil, nil, err
-	}
-	return tx, receipt, nil
+	return tx, nil
 }
 
 func (c *Clientx) startBackground() {
-	beforeNumber := c.BlockNumber()
+	beforeTime := time.Now().Add(-time.Second)
 	go func() {
 		queryTicker := time.NewTicker(time.Second)
 		defer queryTicker.Stop()
-		beforeTime := time.Now().Add(-time.Second)
 		for {
 			header, err := c.HeaderByNumber(nil, 0)
-			if err == nil && header.Number.Cmp(c.latestHeader.Number) > 0 {
-				c.miningInterval = time.Since(beforeTime)
+			if err == nil {
+				if header.Number.Cmp(c.latestHeader.Number) > 0 {
+					if diff := time.Since(beforeTime); diff > time.Second {
+						c.miningInterval = time.Since(beforeTime)
+					}
+				}
 				c.latestHeader = header
 				beforeTime = time.Now()
 			}
@@ -360,7 +404,7 @@ func (c *Clientx) startBackground() {
 	}()
 	queryTicker := time.NewTicker(100 * time.Millisecond)
 	defer queryTicker.Stop()
-	for beforeNumber >= c.BlockNumber() {
+	for _beforeTime := beforeTime; _beforeTime == beforeTime; {
 		<-queryTicker.C
 	}
 }
@@ -488,9 +532,15 @@ func (c *Clientx) SuggestGasPrice() (gasPrice *big.Int) {
 func (c *Clientx) SuggestGasTipCap() (gasTipCap *big.Int) {
 	for {
 		client := c.it.WaitNext()
+		if c.non1559Gas {
+			return c.SuggestGasPrice()
+		}
 		gasTipCap, err := client.SuggestGasTipCap(c.ctx)
 		if err != nil {
 			c.errorCallback(client.SuggestGasTipCap, client, err)
+			if strings.LastIndex(err.Error(), "not found") != -1 {
+				c.non1559Gas = true
+			}
 			continue
 		}
 		return Add(gasTipCap, c.config.GasTipAdditional)
@@ -868,7 +918,7 @@ func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoun
 		client := c.it.WaitNext()
 		receipt, err := client.TransactionReceipt(c.ctx, txHash)
 		if err != nil {
-			c.errorCallback(c.WaitMined, client, err)
+			c.errorCallback(c.WaitMined, client, fmt.Errorf("%v (hash=%v)", err, txHash))
 			if errors.Is(err, ethereum.NotFound) {
 				if _notFoundReturn <= c.BlockNumber() {
 					return nil, err

@@ -48,6 +48,11 @@ func Address(addressLike any, isPri ...bool) common.Address {
 	return common.BigToAddress(BigInt(addressLike))
 }
 
+func AddressPtr(addressLike any, isPri ...bool) *common.Address {
+	addr := Address(addressLike, isPri...)
+	return &addr
+}
+
 // AddressSlice parse any to []common.Address, eg: []string to []common.Address
 func AddressSlice(addressLikeArr any) (addresses []common.Address) {
 	arrValue := reflect.ValueOf(addressLikeArr)
