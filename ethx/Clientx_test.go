@@ -13,7 +13,7 @@ func Test_Clientx(t *testing.T) {
 	log.Println(err)
 	log.Println(receipt)
 
-	//receipt, err := clientx.TransferAll(prikey, to)
+	//receipt, err := clientx.TransferETH(prikey, to)
 	//log.Println(err)
 	//log.Println(receipt)
 }

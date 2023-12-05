@@ -334,7 +334,7 @@ func (c *Clientx) unsignedTx(privateKeyLike, to, amount any, options ...Transfer
 	return tx, opts
 }
 
-func (c *Clientx) TransferAll(privateKeyLike, to any) (tx *types.Transaction, err error) {
+func (c *Clientx) TransferETH(privateKeyLike, to any, value ...any) (tx *types.Transaction, err error) {
 	opts := c.TransactOpts(privateKeyLike)
 	opts.GasLimit = 21001
 	var gasCost *big.Int
@@ -344,12 +344,16 @@ func (c *Clientx) TransferAll(privateKeyLike, to any) (tx *types.Transaction, er
 	default:
 		gasCost = Mul(opts.GasPrice, opts.GasLimit)
 	}
-	balance := c.BalanceAt(Address(privateKeyLike, true))
-	if Lte(balance, gasCost) {
+	var amount *big.Int
+	if len(value) > 0 {
+		amount = BigInt(value[0])
+	} else {
+		amount = c.BalanceAt(Address(privateKeyLike, true))
+	}
+	if Lte(amount, gasCost) {
 		return nil, fmt.Errorf("Insufficient funds\n")
 	}
-	amount := Sub(balance, gasCost)
-	return c.Transfer(privateKeyLike, to, amount, TransferOption{Opts: opts})
+	return c.Transfer(privateKeyLike, to, Sub(amount, gasCost), TransferOption{Opts: opts})
 }
 
 // Transfer build transaction and send
