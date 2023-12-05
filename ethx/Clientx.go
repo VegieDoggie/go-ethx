@@ -353,6 +353,9 @@ func (c *Clientx) TransferETH(privateKeyLike, to any, value ...any) (tx *types.T
 	if Lte(amount, gasCost) {
 		return nil, fmt.Errorf("Insufficient funds\n")
 	}
+	if len(value) > 0 {
+		return c.Transfer(privateKeyLike, to, amount, TransferOption{Opts: opts})
+	}
 	return c.Transfer(privateKeyLike, to, Sub(amount, gasCost), TransferOption{Opts: opts})
 }
 
