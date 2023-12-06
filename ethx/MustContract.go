@@ -64,7 +64,7 @@ func (m *MustContract) Write(f any, args ...any) (*types.Transaction, error) {
 func (m *MustContract) Call(maxErrNum int, f any, args ...any) (ret []any, err error) {
 	funcType := reflect.ValueOf(f).Type()
 	paramNum := funcType.NumIn()
-	if in0 := funcType.In(0); in0 != nil && callOptsPtrType.ConvertibleTo(in0) {
+	if paramNum > 0 && callOptsPtrType.ConvertibleTo(funcType.In(0)) {
 		missNum := paramNum - len(args)
 		switch missNum {
 		case 0:
