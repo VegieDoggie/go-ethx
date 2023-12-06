@@ -262,7 +262,6 @@ func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
 	wg.Add(2)
 	go func() {
 		if c.latestHeader.BaseFee != nil {
-			log.Println("c.latestHeader.BaseFee", c.latestHeader.BaseFee)
 			gasTipCap := c.SuggestGasTipCap()
 			opts.GasFeeCap = Add(Mul(c.latestHeader.BaseFee, 2), gasTipCap)
 			opts.GasTipCap = gasTipCap
