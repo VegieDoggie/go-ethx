@@ -33,6 +33,11 @@ func Hash(hashLike any) common.Hash {
 	return common.BigToHash(BigInt(hashLike))
 }
 
+func HashPtr(hashLike any) *common.Hash {
+	hash := Hash(hashLike)
+	return &hash
+}
+
 // Address addressLike is non-nil
 // Attention: str without 0x will be treated as hex, eg: "10" => 0x10.
 func Address(addressLike any, isPri ...bool) common.Address {

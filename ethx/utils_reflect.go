@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"log"
 	"math/big"
 	"reflect"
 	"runtime"
@@ -42,40 +41,31 @@ var (
 	hashPtrType     = reflect.TypeOf(new(common.Hash))
 )
 
-// 注意: 如果缺失*bind.CallOpts首参数，则会自动以nil补全 (方便合约查询)
 func call(funcValue reflect.Value, args []any) []reflect.Value {
 	funcType := funcValue.Type()
 	paramNum := funcType.NumIn()
-	var in []reflect.Value
-	if paramNum-len(args) == 1 && callOptsPtrType.ConvertibleTo(funcType.In(0)) {
-		// TODO 如果参数数量相等，首参数需要 callOptsPtrType 但传的是 string或 PrivateKey 类型，则自动构造 Opts
-		if len(args) == 0 || !callOptsPtrType.ConvertibleTo(reflect.TypeOf(args[0])) {
-			args = append([]any{nil}, args...)
-		}
-	}
 	if paramNum != len(args) {
-		panic(fmt.Errorf("call::Parma num mismatch: required %v, but %v\n", paramNum, len(args)))
+		panic(fmt.Errorf("call::Params num mismatch! Required: %v, but %v\n", paramNum, len(args)))
 	}
+	var in []reflect.Value
 	for i := 0; i < paramNum; i++ {
 		if inType := funcType.In(i); args[i] == nil {
 			in = append(in, reflect.Zero(inType))
 		} else {
-			switch {
-			case bigIntPtrType.ConvertibleTo(inType):
-				args[i] = BigInt(args[i])
-			case addressType.ConvertibleTo(inType):
-				args[i] = Address(args[i])
-			case addressPtrType.ConvertibleTo(inType):
-				args[i] = Address(args[i])
-				args[i] = &args[i]
-			case hashType.ConvertibleTo(inType):
-				args[i] = Hash(args[i])
-			case hashPtrType.ConvertibleTo(inType):
-				args[i] = Hash(args[i])
-				args[i] = &args[i]
-			default:
-				if !reflect.TypeOf(args[i]).ConvertibleTo(inType) {
-					log.Println(fmt.Errorf("[WARN] call(%v)::Parma type mismatch: required %v, but %v\n", getFuncName(funcValue), inType, reflect.TypeOf(args[i])))
+			if argType := reflect.TypeOf(args[i]); !argType.ConvertibleTo(inType) {
+				switch {
+				case bigIntPtrType.ConvertibleTo(inType):
+					args[i] = BigInt(args[i])
+				case addressType.ConvertibleTo(inType):
+					args[i] = Address(args[i])
+				case addressPtrType.ConvertibleTo(inType):
+					args[i] = AddressPtr(args[i])
+				case hashType.ConvertibleTo(inType):
+					args[i] = Hash(args[i])
+				case hashPtrType.ConvertibleTo(inType):
+					args[i] = HashPtr(args[i])
+				default:
+					panic(fmt.Errorf("[WARN] call(%v)::Param type mismatch! Required: %v, but %v\n", getFuncName(funcValue), inType, reflect.TypeOf(args[i])))
 				}
 			}
 			in = append(in, reflect.ValueOf(args[i]))

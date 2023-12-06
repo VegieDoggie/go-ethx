@@ -49,7 +49,7 @@ func (m *MustContract) Read(f any, args ...any) []any {
 }
 
 // Write to contract
-// Attention: missing the first param/*bind.CallOpts is illegal
+// Attention: missing the first *bind.CallOpts or PrivateKey is illegal
 func (m *MustContract) Write(f any, args ...any) (*types.Transaction, error) {
 	rets, err := m.Call(m.config.MaxMustErrNumW, f, args...)
 	if err != nil {
@@ -58,21 +58,25 @@ func (m *MustContract) Write(f any, args ...any) (*types.Transaction, error) {
 	return rets[0].(*types.Transaction), nil
 }
 
-// WriteWithPrivateKey to contract, don't pass *bind.TransactOpts
-func (m *MustContract) WriteWithPrivateKey(privateKey, f any, args ...any) (*types.Transaction, error) {
-	opts := m.client.TransactOpts(privateKey)
-	args = append([]any{opts}, opts)
-	rets, err := m.Call(m.config.MaxMustErrNumW, f, args...)
-	if err != nil {
-		return nil, err
-	}
-	return rets[0].(*types.Transaction), nil
-}
-
 // Call fit unsafe action, eg: maybe write failed
-// If READ: missing the first param/*bind.CallOpts is legal
-// If WRITE: missing the first param/*bind.CallOpts is illegal
+// If READ: missing the first *bind.CallOpts is legal
+// If WRITE: missing the first *bind.CallOpts or PrivateKey is illegal
 func (m *MustContract) Call(maxErrNum int, f any, args ...any) (ret []any, err error) {
+	funcType := reflect.ValueOf(f).Type()
+	paramNum := funcType.NumIn()
+	if callOptsPtrType.ConvertibleTo(funcType.In(0)) {
+		missNum := paramNum - len(args)
+		switch missNum {
+		case 0:
+			if !callOptsPtrType.ConvertibleTo(reflect.TypeOf(args[0])) {
+				args[0] = m.client.TransactOpts(args[0])
+			}
+		case 1:
+			if len(args) == 0 || !callOptsPtrType.ConvertibleTo(reflect.TypeOf(args[0])) {
+				args = append([]any{nil}, args...)
+			}
+		}
+	}
 	for i := 0; i < maxErrNum; i++ {
 		ret, err = m.callContract(f, args...)
 		if err != nil {

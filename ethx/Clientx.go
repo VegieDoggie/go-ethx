@@ -47,7 +47,7 @@ func NewClientxConfig() *ClientxConfig {
 		Event: EventConfig{
 			IntervalBlocks: 500,
 			OverrideBlocks: 1000,
-			DelayBlocks:    4,
+			DelayBlocks:    3,
 		},
 		GasLimit:         8000000,
 		NotFundBlocks:    9,
