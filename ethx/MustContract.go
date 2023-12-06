@@ -144,7 +144,6 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 		// reflect.TypeOf(m.constructor).Out(0) : *TestLog.TestLog
 		// reflect.New(reflect.TypeOf(m.constructor).Out(0).Elem()) : new(TestLog.TestLog)
 		// reflect.New(reflect.TypeOf(m.constructor).Out(0).Elem()).MethodByName(filterFcName).Type() : func(*bind.FilterOpts, []common.Address) (*TestLog.TestLogIndex1Iterator, error)
-		// 过滤参数自动补全
 		paramNum := reflect.New(reflect.TypeOf(m.constructor).Out(0).Elem()).MethodByName(filterFcName).Type().NumIn()
 		if diff := paramNum - len(index); diff > 1 {
 			for i := 1; i < diff; i++ {
@@ -154,7 +153,6 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 		txHashSet := mapset.NewThreadUnsafeSet[string]()
 		filterFc := func(from, to uint64) {
 			defer m.ignoreCloseChannelPanic()
-			log.Println("filterFc:", from, to)
 			opts := &bind.FilterOpts{
 				Start:   from,
 				End:     &to,
@@ -202,7 +200,6 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 				blockNumber <- _from
 			}()
 			_to = m.client.BlockNumber()
-			log.Println("from:", _from, "_to:", _to)
 			select {
 			case <-tick.C:
 			case <-stop:
