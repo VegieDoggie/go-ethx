@@ -39,6 +39,9 @@ func Test_Call0(t *testing.T) {
 	if mustTestLog.Read0(consts.TestLog.GetData0).(*big.Int).Cmp(BigInt(100)) != 0 {
 		panic(fmt.Errorf("GetData0"))
 	}
+	if mustTestLog.Read0(consts.TestLog.GetData0, nil).(*big.Int).Cmp(BigInt(100)) != 0 {
+		panic(fmt.Errorf("GetData0"))
+	}
 	//log.Println(mustTestLog.Read(consts.TestLog.GetData1, 1))
 	//log.Println(mustTestLog.Read(consts.TestLog.GetData2, 1, 2))
 }

@@ -64,15 +64,15 @@ func (m *MustContract) Write(f any, args ...any) (*types.Transaction, error) {
 func (m *MustContract) Call(maxErrNum int, f any, args ...any) (ret []any, err error) {
 	funcType := reflect.ValueOf(f).Type()
 	paramNum := funcType.NumIn()
-	if callOptsPtrType.ConvertibleTo(funcType.In(0)) {
+	if in0 := funcType.In(0); in0 != nil && callOptsPtrType.ConvertibleTo(in0) {
 		missNum := paramNum - len(args)
 		switch missNum {
 		case 0:
-			if !callOptsPtrType.ConvertibleTo(reflect.TypeOf(args[0])) {
+			if args[0] != nil && !callOptsPtrType.ConvertibleTo(reflect.TypeOf(args[0])) {
 				args[0] = m.client.TransactOpts(args[0])
 			}
 		case 1:
-			if len(args) == 0 || !callOptsPtrType.ConvertibleTo(reflect.TypeOf(args[0])) {
+			if len(args) == 0 || (args[0] != nil && !callOptsPtrType.ConvertibleTo(reflect.TypeOf(args[0]))) {
 				args = append([]any{nil}, args...)
 			}
 		}
