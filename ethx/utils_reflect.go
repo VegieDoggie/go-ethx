@@ -48,6 +48,7 @@ func call(funcValue reflect.Value, args []any) []reflect.Value {
 	paramNum := funcType.NumIn()
 	var in []reflect.Value
 	if paramNum-len(args) == 1 && callOptsPtrType.ConvertibleTo(funcType.In(0)) {
+		// TODO 如果参数数量相等，首参数需要 callOptsPtrType 但传的是 string或 PrivateKey 类型，则自动构造 Opts
 		if len(args) == 0 || !callOptsPtrType.ConvertibleTo(reflect.TypeOf(args[0])) {
 			args = append([]any{nil}, args...)
 		}
