@@ -985,7 +985,7 @@ func segmentCallback(from, to uint64, config EventConfig, callback func(from, to
 				wg.Done()
 			}()
 			i++
-			if i%128 == 0 {
+			if (i+1)%128 == 0 {
 				wg.Wait()
 			}
 		}
