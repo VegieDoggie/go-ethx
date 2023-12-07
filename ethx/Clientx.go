@@ -968,21 +968,20 @@ func (c *Clientx) Shuffle() *Clientx {
 
 func segmentCallback(from, to uint64, config EventConfig, callback func(from, to uint64)) (newStart uint64) {
 	if from+config.DelayBlocks <= to {
-
 		to -= config.DelayBlocks
 		count := (to - from) / config.IntervalBlocks
 
 		wg := new(sync.WaitGroup)
-		arrest := from + config.OverrideBlocks
+		arrestFrom := from + config.OverrideBlocks
 		for i := uint64(0); i < count; {
 			wg.Add(1)
-			_from := from + i*config.IntervalBlocks
-			_to := _from + config.IntervalBlocks - 1
-			if _from >= arrest {
-				_from -= config.OverrideBlocks
+			segFrom := from + i*config.IntervalBlocks
+			segTo := segFrom + config.IntervalBlocks - 1
+			if segFrom >= arrestFrom {
+				segFrom -= config.OverrideBlocks
 			}
 			go func() {
-				callback(_from, _to)
+				callback(segFrom, segTo)
 				wg.Done()
 			}()
 			i++

@@ -141,8 +141,6 @@ func (m *MustContract) callContract(f any, args ...any) ([]any, error) {
 func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (chEvent chan any, blockNumber chan uint64, stop chan bool) {
 	chEvent, blockNumber, stop = make(chan any, 512), make(chan uint64), make(chan bool, 1)
 	go func() {
-		tick := time.NewTicker(m.client.miningInterval)
-		defer tick.Stop()
 		filterFcName := "Filter" + eventName
 		// reflect.TypeOf(m.constructor) : func(common.Address, bind.ContractBackend) (*TestLog.TestLog, error)
 		// reflect.TypeOf(m.constructor).Out(0) : *TestLog.TestLog
@@ -197,13 +195,15 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 			}
 		}
 
-		_from, _to := from, m.client.BlockNumber()
+		subFrom, subTo := from, m.client.BlockNumber()
+		tick := time.NewTicker(m.client.miningInterval)
+		defer tick.Stop()
 		for {
-			_from = segmentCallback(_from, _to, m.config.Event, filterFc)
+			subFrom = segmentCallback(subFrom, subTo, m.config.Event, filterFc)
 			go func() {
-				blockNumber <- _from
+				blockNumber <- subFrom
 			}()
-			_to = m.client.BlockNumber()
+			subTo = m.client.BlockNumber()
 			select {
 			case <-tick.C:
 			case <-stop:
