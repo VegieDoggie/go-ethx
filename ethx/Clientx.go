@@ -202,6 +202,7 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 			client, chainId, err := checkChainid(rpc, 3)
 			if err != nil {
 				log.Printf("[WARN] UpdateRPCs::Unreliable rpc: %v\n", rpc)
+				continue
 			}
 			if c.chainId.Cmp(chainId) != 0 {
 				log.Printf("[WARN] UpdateRPCs::required chainID is %v,but rpc(%v) chainId is %v\n", c.chainId, rpc, chainId)
@@ -222,7 +223,7 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 					break
 				}
 			}
-			if c.it.Len() > 1 {
+			if client != nil && c.it.Len() > 1 {
 				updated = true
 				delete(c.rpcMap, client)
 				c.it.Remove(client)
