@@ -36,7 +36,6 @@ type Clientx struct {
 	notFoundBlocks uint64
 	chainId        *big.Int
 	latestHeader   *types.Header
-	miningInterval time.Duration
 	startedAt      time.Time
 	config         *ClientxConfig
 	non1559Gas     bool
@@ -93,9 +92,8 @@ func NewClientx(rpcList []string, weights []int, config *ClientxConfig, limiter 
 		latestHeader:   &types.Header{Number: BigInt(0)},
 		startedAt:      time.Now(),
 		config:         config,
-		miningInterval: time.Second, // min
 	}
-	c.startBackground()
+	c.init()
 	return c
 }
 
@@ -244,7 +242,7 @@ func (c *Clientx) errorCallback(f any, client *ethclient.Client, err error) {
 	switch prefix {
 	case "429", "521":
 		if c.rpcErrCountMap[client]%10 == 0 {
-			log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], "BUSY!")
+			log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], "Too Many Requests!")
 		}
 	default:
 		log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
@@ -387,29 +385,31 @@ func (c *Clientx) send(tx *types.Transaction, opts *bind.TransactOpts) (signedTx
 	return tx, nil
 }
 
-func (c *Clientx) startBackground() {
-	beforeTime := time.Now().Add(-time.Second)
+func (c *Clientx) init() {
 	go func() {
-		queryTicker := time.NewTicker(time.Second)
-		defer queryTicker.Stop()
+		doneTicker := time.NewTicker(time.Second)
+		defer doneTicker.Stop()
+
+		failTicker := time.NewTicker(100 * time.Millisecond)
+		defer failTicker.Stop()
+
 		for {
-			header, err := c.HeaderByNumber(nil, 0)
+			header, err := c.NextClient().HeaderByNumber(c.ctx, nil)
 			if err == nil {
 				if header.Number.Cmp(c.latestHeader.Number) > 0 {
-					if diff := time.Since(beforeTime); diff > time.Second {
-						c.miningInterval = time.Since(beforeTime)
-					}
+					c.latestHeader = header
 				}
-				c.latestHeader = header
-				beforeTime = time.Now()
+
+				<-doneTicker.C
+				continue
 			}
-			<-queryTicker.C
+
+			<-failTicker.C
 		}
 	}()
-	queryTicker := time.NewTicker(100 * time.Millisecond)
-	defer queryTicker.Stop()
-	for _beforeTime := beforeTime; _beforeTime == beforeTime; {
-		<-queryTicker.C
+
+	for c.latestHeader.Number.Uint64() == 0 {
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -646,14 +646,14 @@ func (c *Clientx) BlockByHash(hash any, notFoundBlocks ...uint64) (block *types.
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_hash := Hash(hash)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
 	for {
 		client := c.it.WaitNext()
 		block, err = client.BlockByHash(c.ctx, _hash)
 		if err != nil {
 			c.errorCallback(client.BlockByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return nil, err
 				}
 			}
@@ -673,14 +673,14 @@ func (c *Clientx) BlockByNumber(blockNumber any, notFoundBlocks ...uint64) (bloc
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_blockNumber := BigInt(blockNumber)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
 	for {
 		client := c.it.WaitNext()
 		block, err = client.BlockByNumber(c.ctx, _blockNumber)
 		if err != nil {
 			c.errorCallback(client.BlockByNumber, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return nil, err
 				}
 			}
@@ -696,14 +696,14 @@ func (c *Clientx) HeaderByHash(hash any, notFoundBlocks ...uint64) (header *type
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_hash := Hash(hash)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
 	for {
 		client := c.it.WaitNext()
 		header, err = client.HeaderByHash(c.ctx, _hash)
 		if err != nil {
 			c.errorCallback(client.HeaderByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return nil, err
 				}
 			}
@@ -720,14 +720,14 @@ func (c *Clientx) HeaderByNumber(blockNumber any, notFoundBlocks ...uint64) (hea
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_blockNumber := BigInt(blockNumber)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
 	for {
 		client := c.it.WaitNext()
 		header, err = client.HeaderByNumber(c.ctx, _blockNumber)
 		if err != nil {
 			c.errorCallback(client.HeaderByNumber, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return nil, err
 				}
 			}
@@ -743,14 +743,14 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_hash := Hash(hash)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
 	for {
 		client := c.it.WaitNext()
 		tx, isPending, err = client.TransactionByHash(c.ctx, _hash)
 		if err != nil {
 			c.errorCallback(client.TransactionByHash, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return nil, isPending, err
 				}
 			}
@@ -768,21 +768,23 @@ func (c *Clientx) TransactionByHash(hash any, notFoundBlocks ...uint64) (tx *typ
 // There is a fast-path for transactions retrieved by TransactionByHash and
 // TransactionInBlock. Getting their sender address can be done without an RPC interaction.
 func (c *Clientx) TransactionSender(tx *types.Transaction, blockHash any, index uint, notFoundBlocks ...uint64) (sender common.Address, err error) {
-	queryTicker := time.NewTicker(time.Second)
-	defer queryTicker.Stop()
+	failTicker := time.NewTicker(time.Second)
+	defer failTicker.Stop()
+
 	_blockHash := Hash(blockHash)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
+
 	for {
 		client := c.it.WaitNext()
 		sender, err = client.TransactionSender(c.ctx, tx, _blockHash, index)
 		if err != nil {
 			c.errorCallback(client.TransactionSender, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return sender, err
 				}
 			}
-			<-queryTicker.C
+			<-failTicker.C
 			continue
 		}
 		return sender, err
@@ -830,14 +832,14 @@ func (c *Clientx) TransactionCount(blockHash any, notFoundBlocks ...uint64) (cou
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_blockHash := Hash(blockHash)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
 	for {
 		client := c.it.WaitNext()
 		count, err = client.TransactionCount(c.ctx, _blockHash)
 		if err != nil {
 			c.errorCallback(client.TransactionCount, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return count, err
 				}
 			}
@@ -867,14 +869,14 @@ func (c *Clientx) TransactionInBlock(blockHash any, index uint, notFoundBlocks .
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_blockHash := Hash(blockHash)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
 	for {
 		client := c.it.WaitNext()
 		tx, err = client.TransactionInBlock(c.ctx, _blockHash, index)
 		if err != nil {
 			c.errorCallback(client.TransactionInBlock, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return tx, err
 				}
 			}
@@ -891,14 +893,14 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
 	_txHash := Hash(txHash)
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
 	for {
 		client := c.it.WaitNext()
 		receipt, err = client.TransactionReceipt(c.ctx, _txHash)
 		if err != nil {
 			c.errorCallback(client.TransactionReceipt, client, err)
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return receipt, err
 				}
 			}
@@ -913,24 +915,24 @@ func (c *Clientx) TransactionReceipt(txHash any, notFoundBlocks ...uint64) (rece
 // It stops waiting when the context is canceled.
 // ethereum/go-ethereum@v1.11.6/accounts/abi/bind/util.go:32
 func (c *Clientx) WaitMined(tx *types.Transaction, confirmBlocks uint64, notFoundBlocks ...uint64) (*types.Receipt, error) {
-	queryTicker := time.NewTicker(c.miningInterval)
+	queryTicker := time.NewTicker(time.Second)
 	defer queryTicker.Stop()
-	txHash := tx.Hash()
-	_confirmReturn := c.BlockNumber() + confirmBlocks
-	_notFoundReturn := c.notFoundReturn(notFoundBlocks)
-	for {
+
+	confirmEnd := c.BlockNumber() + confirmBlocks
+	notFoundEnd := c.notFoundReturn(notFoundBlocks)
+	for txHash := tx.Hash(); ; {
 		client := c.it.WaitNext()
 		receipt, err := client.TransactionReceipt(c.ctx, txHash)
 		if err != nil {
 			c.errorCallback(c.WaitMined, client, fmt.Errorf("%v (hash=%v)", err, txHash))
 			if errors.Is(err, ethereum.NotFound) {
-				if _notFoundReturn <= c.BlockNumber() {
+				if notFoundEnd <= c.BlockNumber() {
 					return nil, err
 				}
 			}
 		} else {
-			_notFoundReturn = c.notFoundReturn(notFoundBlocks)
-			if _confirmReturn <= c.BlockNumber() {
+			notFoundEnd = c.notFoundReturn(notFoundBlocks)
+			if confirmEnd <= c.BlockNumber() {
 				return receipt, nil
 			}
 		}

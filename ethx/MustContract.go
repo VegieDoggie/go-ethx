@@ -196,8 +196,8 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 		}
 
 		subFrom, subTo := from, m.client.BlockNumber()
-		tick := time.NewTicker(m.client.miningInterval)
-		defer tick.Stop()
+		subTicker := time.NewTicker(time.Second)
+		defer subTicker.Stop()
 		for {
 			subFrom = segmentCallback(subFrom, subTo, m.config.Event, filterFc)
 			go func() {
@@ -205,7 +205,7 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 			}()
 			subTo = m.client.BlockNumber()
 			select {
-			case <-tick.C:
+			case <-subTicker.C:
 			case <-stop:
 				close(stop)
 				return
