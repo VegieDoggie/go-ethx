@@ -78,7 +78,7 @@ func NewSimpleClientx(rpcList []string, concurrency ...int) *Clientx {
 func NewClientx(rpcList []string, weights []int, config *ClientxConfig, limiter ...*rate.Limiter) *Clientx {
 	rpcList = mapset.NewThreadUnsafeSet[string](rpcList...).ToSlice()
 	iterator, rpcMap, chainId := buildIterator(rpcList, weights, limiter...)
-	notFundBlocks := uint64(len(rpcList) * 2)
+	notFundBlocks := uint64(len(rpcList))
 	if notFundBlocks < config.NotFundBlocks {
 		notFundBlocks = config.NotFundBlocks
 	}
@@ -242,10 +242,10 @@ func (c *Clientx) errorCallback(f any, client *ethclient.Client, err error) {
 	switch prefix {
 	case "429", "521":
 		if c.rpcErrCountMap[client]%10 == 0 {
-			log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], "Too Many Requests!")
+			log.Printf("[%v] %v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", c.BlockNumber(), time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], "Too Many Requests!")
 		}
 	default:
-		log.Printf("%v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
+		log.Printf("[%v] %v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", c.BlockNumber(), time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
 	}
 }
 
@@ -390,7 +390,7 @@ func (c *Clientx) init() {
 		doneTicker := time.NewTicker(time.Second)
 		defer doneTicker.Stop()
 
-		failTicker := time.NewTicker(100 * time.Millisecond)
+		failTicker := time.NewTicker(time.Second / 2)
 		defer failTicker.Stop()
 
 		for {
