@@ -968,7 +968,7 @@ func (c *Clientx) Shuffle() *Clientx {
 	return c
 }
 
-func segmentCallback(from, to uint64, config EventConfig, callback func(from, to uint64)) (newStart uint64) {
+func segmentCallback(from, to uint64, config *EventConfig, callback func(from, to uint64)) (newStart uint64) {
 	if from+config.DelayBlocks <= to {
 		to -= config.DelayBlocks
 		count := (to - from) / config.IntervalBlocks

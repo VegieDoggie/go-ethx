@@ -196,10 +196,11 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 		}
 
 		subFrom, subTo := from, m.client.BlockNumber()
+		config := m.config.Event.Clone()
 		subTicker := time.NewTicker(time.Second)
 		defer subTicker.Stop()
 		for {
-			subFrom = segmentCallback(subFrom, subTo, m.config.Event, filterFc)
+			subFrom = segmentCallback(subFrom, subTo, config, filterFc)
 			go func() {
 				blockNumber <- subFrom
 			}()

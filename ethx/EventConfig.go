@@ -31,3 +31,11 @@ func (e *EventConfig) panicIfNotValid() {
 		log.Printf("[WARN] EventConfig::If you are tracking logs, recommended DelayBlocks >= 3 (or risky). see: https://github.com/ethereum/go-ethereum/blob/master/core/types/log.go#L53")
 	}
 }
+
+func (e *EventConfig) Clone() *EventConfig {
+	return &EventConfig{
+		IntervalBlocks: e.IntervalBlocks,
+		OverrideBlocks: e.OverrideBlocks,
+		DelayBlocks:    e.DelayBlocks,
+	}
+}

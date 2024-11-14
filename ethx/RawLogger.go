@@ -74,7 +74,11 @@ func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart c
 		}
 		log.Printf("Filter: [from=%v,to=%v] start... | %v\n", from, to, r.addresses)
 		beforeTime := time.Now()
-		chNewStart <- segmentCallback(from, to, r.config.Event, fc)
+		config := r.config.Event.Clone()
+		if to+config.DelayBlocks <= r.client.BlockNumber() {
+			config.DelayBlocks = 0
+		}
+		chNewStart <- segmentCallback(from, to, config, fc)
 		log.Printf("Filter(%v): [from=%v,to=%v] Success! | %v\n", time.Since(beforeTime), from, to, r.addresses)
 	}()
 	return chLogs, chNewStart
