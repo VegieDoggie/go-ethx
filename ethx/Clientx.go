@@ -279,7 +279,7 @@ func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
 }
 
 type TransferOption struct {
-	data       []byte             // option
+	Data       []byte             // option
 	AccessList types.AccessList   // option
 	Opts       *bind.TransactOpts // option
 }
@@ -288,7 +288,7 @@ func (c *Clientx) unsignedTx(privateKeyLike, to, amount any, options ...Transfer
 	var data []byte
 	var accessList types.AccessList
 	if len(options) > 0 {
-		data = options[0].data
+		data = options[0].Data
 		accessList = options[0].AccessList
 		opts = options[0].Opts
 	}
