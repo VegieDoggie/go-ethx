@@ -231,9 +231,7 @@ func Add(numLike ...any) *big.Int {
 }
 
 func Sub(numBase any, numLike ...any) *big.Int {
-	num := BigInt(numBase)
-	num.Sub(num, Sum(numLike...))
-	return num
+	return new(big.Int).Sub(BigInt(numBase), Sum(numLike...))
 }
 
 func Mul(numLike ...any) *big.Int {
