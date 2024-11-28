@@ -194,6 +194,10 @@ func Test_MulDiv(t *testing.T) {
 }
 
 func Test_Sub(t *testing.T) {
+	x10 := BigInt(10)
+	x9 := Sub(x10, 1)
+	assert.Equal(t, x10.Int64(), int64(10))
+	assert.Equal(t, x9.Int64(), int64(9))
 	assert.Equal(t, int64(1-100-3-35), Sub(1, 100, 3, 35).Int64())
 	assert.Equal(t, int64(1200-100-0-101), Sub(1200, 100, 0, 101).Int64())
 	assert.Equal(t, int64(1200-100-0-101), Sub(1200, []int{100, 0, 101}).Int64())
