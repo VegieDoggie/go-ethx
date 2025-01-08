@@ -992,8 +992,23 @@ func segmentCallback(from, to uint64, config *EventConfig, callback func(from, t
 			}
 		}
 
-		if last := from + count*config.IntervalBlocks; last <= to {
-			callback(last, to)
+		if segFrom := from + count*config.IntervalBlocks; segFrom <= to {
+			if segFrom >= arrestFrom {
+				segFrom -= config.OverrideBlocks
+			}
+			wg.Add(3)
+			go func() {
+				callback(segFrom, to)
+				wg.Done()
+			}()
+			go func() {
+				callback(segFrom, to)
+				wg.Done()
+			}()
+			go func() {
+				callback(segFrom, to)
+				wg.Done()
+			}()
 		}
 
 		wg.Wait()
