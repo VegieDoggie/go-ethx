@@ -94,6 +94,7 @@ func NewClientx(rpcList []string, weights []int, config *ClientxConfig, limiter 
 		config:         config,
 	}
 	c.init()
+	defer time.Sleep(2 * time.Second)
 	return c
 }
 
@@ -130,14 +131,13 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 			go func() {
 				for j := i + 1; j < len(rpcList); j++ {
 					_rpc = rpcList[j]
-					client, chainId, err = checkChainid(_rpc, 3)
+					client, chainId, err := checkChainid(_rpc, 3)
 					if err != nil {
 						log.Printf("[WARN] buildIterator::%v\n", err)
 						continue
 					}
 					if latestChainId.Cmp(chainId) != 0 {
-						log.Printf("[ERROR] [ABORT] buildIterator::previous chainID is %v,but rpc(%v) is chainId(%v)!\n", latestChainId, _rpc, chainId)
-						continue
+						panic(fmt.Sprintf("[ERROR] [ABORT] buildIterator::previous chainID is %v,but rpc(%v) is chainId(%v)!\n", latestChainId, _rpc, chainId))
 					}
 					update(_rpc, client, weightList[j])
 				}
