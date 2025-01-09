@@ -50,6 +50,7 @@ func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart c
 	chNewStart = make(chan uint64, 1)
 	go func() {
 		defer close(chLogs)
+		hasEvent := false
 		fc := func(_from, _to uint64) {
 			// Attention!!!Repeat scanning _to prevent missing blocks
 			var query = ethereum.FilterQuery{
@@ -65,6 +66,9 @@ func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart c
 				for _, nLog := range nLogs {
 					hashID = fmt.Sprintf("%v%v", nLog.TxHash, nLog.Index)
 					if !r.txHashSet.Contains(hashID) {
+						if !hasEvent {
+							hasEvent = true
+						}
 						r.txHashSet.Add(hashID)
 						chLogs <- nLog
 					}
@@ -74,11 +78,16 @@ func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart c
 		}
 		log.Printf("Filter: [from=%v,to=%v] start... | %v\n", from, to, r.addresses)
 		beforeTime := time.Now()
-		config := r.config.Event.Clone()
-		if to+config.DelayBlocks <= r.client.BlockNumber() {
-			config.DelayBlocks = 0
+		newStart := segmentCallback(from, to, r.config.Event.Clone(), fc)
+		if !hasEvent {
+			if to > from && (to-from)/r.config.Event.IntervalBlocks > 0 {
+				chNewStart <- to - r.config.Event.IntervalBlocks
+			} else {
+				chNewStart <- from
+			}
+		} else {
+			chNewStart <- newStart
 		}
-		chNewStart <- segmentCallback(from, to, config, fc)
 		log.Printf("Filter(%v): [from=%v,to=%v] Success! | %v\n", time.Since(beforeTime), from, to, r.addresses)
 	}()
 	return chLogs, chNewStart
