@@ -44,8 +44,8 @@ type Clientx struct {
 func NewClientxConfig() *ClientxConfig {
 	return &ClientxConfig{
 		Event: EventConfig{
-			IntervalBlocks: 500,
-			OverrideBlocks: 1000,
+			IntervalBlocks: 200,
+			OverrideBlocks: 1300,
 			DelayBlocks:    3,
 		},
 		GasLimit:         8000000,
