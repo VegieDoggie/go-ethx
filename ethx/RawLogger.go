@@ -78,7 +78,7 @@ func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart c
 		}
 		log.Printf("Filter: [from=%v,to=%v] start... | %v\n", from, to, r.addresses)
 		beforeTime := time.Now()
-		newStart := segmentCallback(from, to, r.config.Event.Clone(), fc)
+		newStart := r.client.segmentCallback(from, to, r.config.Event.Clone(), fc)
 		if !hasEvent {
 			if to > from && (to-from)/r.config.Event.IntervalBlocks > 0 {
 				chNewStart <- to - r.config.Event.IntervalBlocks

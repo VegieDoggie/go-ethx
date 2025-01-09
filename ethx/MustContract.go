@@ -200,7 +200,7 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 		subTicker := time.NewTicker(time.Second)
 		defer subTicker.Stop()
 		for {
-			subFrom = segmentCallback(subFrom, subTo, config, filterFc)
+			subFrom = m.client.segmentCallback(subFrom, subTo, config, filterFc)
 			go func() {
 				blockNumber <- subFrom
 			}()

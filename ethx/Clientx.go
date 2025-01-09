@@ -968,7 +968,7 @@ func (c *Clientx) Shuffle() *Clientx {
 	return c
 }
 
-func segmentCallback(from, to uint64, config *EventConfig, callback func(from, to uint64)) (newStart uint64) {
+func (c *Clientx) segmentCallback(from, to uint64, config *EventConfig, callback func(from, to uint64)) (newStart uint64) {
 	if from+config.DelayBlocks <= to {
 		to -= config.DelayBlocks
 		count := (to - from) / config.IntervalBlocks
@@ -996,19 +996,21 @@ func segmentCallback(from, to uint64, config *EventConfig, callback func(from, t
 			if segFrom >= arrestFrom {
 				segFrom -= config.OverrideBlocks
 			}
-			wg.Add(3)
-			go func() {
+			if c.it.Len() > 3 {
+				for i := 0; i < 3; i++ {
+					wg.Add(1)
+					go func() {
+						callback(segFrom, to)
+						wg.Done()
+					}()
+				}
+			} else {
 				callback(segFrom, to)
-				wg.Done()
-			}()
-			go func() {
+				time.Sleep(1 * time.Second)
 				callback(segFrom, to)
-				wg.Done()
-			}()
-			go func() {
+				time.Sleep(1 * time.Second)
 				callback(segFrom, to)
-				wg.Done()
-			}()
+			}
 		}
 
 		wg.Wait()
