@@ -39,6 +39,7 @@ type Clientx struct {
 	startedAt      time.Time
 	config         *ClientxConfig
 	non1559Gas     bool
+	mu             sync.Mutex
 }
 
 func NewClientxConfig() *ClientxConfig {
@@ -110,7 +111,10 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 	rpcMap = make(map[*ethclient.Client]string)
 
 	var reliableClients []*ethclient.Client
+	var mu sync.Mutex
 	update := func(rpc string, client *ethclient.Client, weight int) {
+		mu.Lock()
+		defer mu.Unlock()
 		rpcMap[client] = rpc
 		reliableClients = append(reliableClients, client)
 		for k := 1; k < weight; k++ {
@@ -234,19 +238,21 @@ func (c *Clientx) UpdateRPCs(newRPCs []string) {
 }
 
 func (c *Clientx) errorCallback(f any, client *ethclient.Client, err error) {
-	c.rpcErrCountMap[client]++
-	prefix := err.Error()
-	if len(prefix) > 2 {
-		prefix = prefix[:3]
-	}
-	switch prefix {
-	case "429", "521":
-		if c.rpcErrCountMap[client]%10 == 0 {
-			log.Printf("[%v] %v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", c.BlockNumber(), time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], "Too Many Requests!")
-		}
-	default:
-		log.Printf("[%v] %v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", c.BlockNumber(), time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
-	}
+	//c.mu.Lock()
+	//defer c.mu.Unlock()
+	//c.rpcErrCountMap[client]++
+	//prefix := err.Error()
+	//if len(prefix) > 2 {
+	//	prefix = prefix[:3]
+	//}
+	//switch prefix {
+	//case "429", "521":
+	//	if c.rpcErrCountMap[client]%10 == 0 {
+	//		log.Printf("[%v] %v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", c.BlockNumber(), time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], "Too Many Requests!")
+	//	}
+	//default:
+	//	log.Printf("[%v] %v [WARN] func=%v, rpc=%v #%v, err=%v\r\n", c.BlockNumber(), time.Now().Format(time.DateTime), getFuncName(f), c.rpcMap[client], c.rpcErrCountMap[client], err)
+	//}
 }
 
 // TransactOpts create *bind.TransactOpts, and panic if privateKey err
