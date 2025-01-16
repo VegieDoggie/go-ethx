@@ -129,25 +129,23 @@ func buildIterator(rpcList []string, weightList []int, limiter ...*rate.Limiter)
 			log.Printf("[WARN] buildIterator::%v\n", err)
 			continue
 		}
-		if latestChainId == nil {
-			latestChainId = chainId
-			update(_rpc, client, weightList[i])
-			go func() {
-				for j := i + 1; j < len(rpcList); j++ {
-					_rpc = rpcList[j]
-					client, chainId, err := checkChainid(_rpc, 3)
-					if err != nil {
-						log.Printf("[WARN] buildIterator::%v\n", err)
-						continue
-					}
-					if latestChainId.Cmp(chainId) != 0 {
-						panic(fmt.Sprintf("[ERROR] [ABORT] buildIterator::previous chainID is %v,but rpc(%v) is chainId(%v)!\n", latestChainId, _rpc, chainId))
-					}
-					update(_rpc, client, weightList[j])
+		latestChainId = chainId
+		update(_rpc, client, weightList[i])
+		go func() {
+			for j := i + 1; j < len(rpcList); j++ {
+				_rpc = rpcList[j]
+				client, chainId, err := checkChainid(_rpc, 3)
+				if err != nil {
+					log.Printf("[WARN] buildIterator::%v\n", err)
+					continue
 				}
-			}()
-			break
-		}
+				if latestChainId.Cmp(chainId) != 0 {
+					panic(fmt.Sprintf("[ERROR] [ABORT] buildIterator::previous chainID is %v,but rpc(%v) is chainId(%v)!\n", latestChainId, _rpc, chainId))
+				}
+				update(_rpc, client, weightList[j])
+			}
+		}()
+		break
 	}
 	if latestChainId == nil {
 		panic(fmt.Errorf("[ERROR] buildIterator::Unreliable rpc List: %v\n", rpcList))

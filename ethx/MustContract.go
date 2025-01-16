@@ -184,7 +184,7 @@ func (m *MustContract) subscribe(from uint64, eventName string, index ...any) (c
 				if itNext.Call(nil)[0].Interface().(bool) {
 					// reflect the raw log of *event
 					itRaw := itEvent.Elem().FieldByName("Raw").Interface().(types.Log)
-					hashID := fmt.Sprintf("%v%v", itRaw.TxHash, itRaw.Index)
+					hashID := fmt.Sprintf("%v%v", itRaw.TxHash, itRaw.Topics[0])
 					if !txHashSet.Contains(hashID) {
 						txHashSet.Add(hashID)
 						chEvent <- itEvent.Interface()

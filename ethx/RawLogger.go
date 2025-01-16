@@ -64,7 +64,7 @@ func (r *RawLogger) Filter(from, to uint64) (chLogs chan types.Log, chNewStart c
 				r.mu.Lock()
 				var hashID string
 				for _, nLog := range nLogs {
-					hashID = fmt.Sprintf("%v%v", nLog.TxHash, nLog.Index)
+					hashID = fmt.Sprintf("%v%v", nLog.TxHash, nLog.Topics[0])
 					if !r.txHashSet.Contains(hashID) {
 						if !hasEvent {
 							hasEvent = true
