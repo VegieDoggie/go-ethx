@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
+	"log"
 	"math/big"
 	"strconv"
 	"testing"
@@ -245,6 +246,14 @@ func Test_Lt(t *testing.T) {
 
 func Test_RandBytes(t *testing.T) {
 	assert.Equal(t, 10*2, len(hex.EncodeToString(RandBytes(10))))
+}
+
+func Test_Float(t *testing.T) {
+	d, ok := new(big.Float).SetPrec(512).SetString("11111111111111111111111111111111111111111.111111111111111111111111111111111111111111111111111111111111111111111e18")
+	log.Println(d.Text('f', 0), ok)
+	n, a := d.Int(new(big.Int))
+	log.Println(n, a)
+	log.Println(FloatToString(d, 18))
 }
 
 func Test_CheckRpcSpeed(t *testing.T) {

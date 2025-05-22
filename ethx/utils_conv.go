@@ -186,8 +186,99 @@ func BigInt(numLike any) *big.Int {
 		switch kind {
 		case reflect.Pointer, reflect.UnsafePointer:
 			return BigInt(rv.Elem().Interface())
+		default:
+			panic(fmt.Errorf("Unknown numLike: %v\n", value))
 		}
-		panic(fmt.Errorf("Unknown numLike: %v\n", value))
+	}
+}
+
+func bigToFloat(b *big.Int, prec uint) *big.Float {
+	return new(big.Float).SetPrec(prec).SetInt(b)
+}
+
+func BigFloat(numLike any, prec ...uint) *big.Float {
+	if numLike == nil {
+		return nil
+	}
+	_prec := uint(512)
+	if len(prec) > 0 {
+		_prec = prec[0]
+	}
+	switch value := numLike.(type) {
+	case *big.Float:
+		return value
+	case *big.Int:
+		return bigToFloat(value, _prec)
+	case common.Address:
+		return bigToFloat(value.Big(), _prec)
+	case [32]byte:
+		return bigToFloat((common.Hash)(value).Big(), _prec)
+	case common.Hash:
+		return bigToFloat(value.Big(), _prec)
+	case *common.Address:
+		return bigToFloat(value.Big(), _prec)
+	case *common.Hash:
+		return bigToFloat(value.Big(), _prec)
+	case [20]byte:
+		return bigToFloat((common.Address)(value).Big(), _prec)
+	case []byte:
+		s := string(value)
+		switch {
+		case r10.MatchString(s):
+			return bigToFloat(_stringBig(s, 10), _prec)
+		case r16.MatchString(s):
+			return bigToFloat(_stringBig(s[2:], 16), _prec)
+		case r2.MatchString(s):
+			return bigToFloat(_stringBig(s[2:], 2), _prec)
+		case r8.MatchString(s):
+			return bigToFloat(_stringBig(s[2:], 8), _prec)
+		default:
+			return bigToFloat(new(big.Int).SetBytes(value), _prec)
+		}
+	case int:
+		return bigToFloat(big.NewInt(int64(value)), _prec)
+	case int8:
+		return bigToFloat(big.NewInt(int64(value)), _prec)
+	case int16:
+		return bigToFloat(big.NewInt(int64(value)), _prec)
+	case int32:
+		return bigToFloat(big.NewInt(int64(value)), _prec)
+	case int64:
+		return bigToFloat(big.NewInt(value), _prec)
+	case uint:
+		return bigToFloat(new(big.Int).SetUint64(uint64(value)), _prec)
+	case uint8:
+		return bigToFloat(new(big.Int).SetUint64(uint64(value)), _prec)
+	case uint16:
+		return bigToFloat(new(big.Int).SetUint64(uint64(value)), _prec)
+	case uint32:
+		return bigToFloat(new(big.Int).SetUint64(uint64(value)), _prec)
+	case uint64:
+		return bigToFloat(new(big.Int).SetUint64(value), _prec)
+	case float32:
+		return bigToFloat(new(big.Int).SetUint64(uint64(value)), _prec)
+	case float64:
+		return bigToFloat(new(big.Int).SetUint64(uint64(value)), _prec)
+	case string:
+		f, ok := new(big.Float).SetPrec(_prec).SetString(value)
+		if !ok {
+			panic(fmt.Errorf("Unknown numLike: %v\n", value))
+		}
+		return f
+	case bool:
+		if value {
+			return bigToFloat(big.NewInt(1), _prec)
+		}
+		return bigToFloat(big.NewInt(0), _prec)
+	default:
+		rv := reflect.ValueOf(value)
+		kind := rv.Kind()
+		switch kind {
+		case reflect.Pointer, reflect.UnsafePointer:
+			return bigToFloat(BigInt(rv.Elem().Interface()), _prec)
+		default:
+			panic(fmt.Errorf("Unknown numLike: %v\n", value))
+		}
 	}
 }
 
@@ -200,14 +291,27 @@ func stringBig(value string) *big.Int {
 	case Is0o(value):
 		return _stringBig(value[2:], 8)
 	default:
-		for i := range value {
-			switch value[i] {
-			case 'e', 'E':
-				return new(big.Int).Mul(_stringBig(value[:i], 10), new(big.Int).Exp(bigInt10, _stringBig(value[i+1:], 10), nil))
-			}
+		f, ok := new(big.Float).SetPrec(512).SetString(value)
+		if !ok {
+			panic(fmt.Errorf("Unknown numLike: %v\n", value))
 		}
-		return _stringBig(value, 10)
+		n, _ := f.Int(new(big.Int))
+		return n
 	}
+}
+
+func FloatToString(f *big.Float, maxDecimals int) string {
+	s := f.Text('f', -1)
+	parts := strings.Split(s, ".")
+	if len(parts) < 2 {
+		return s
+	}
+
+	if len(parts[1]) <= maxDecimals {
+		return s
+	}
+
+	return parts[0] + "." + parts[1][:maxDecimals]
 }
 
 func _stringBig(value string, base int) *big.Int {
