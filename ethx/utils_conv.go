@@ -256,9 +256,9 @@ func BigFloat(numLike any, prec ...uint) *big.Float {
 	case uint64:
 		return bigToFloat(new(big.Int).SetUint64(value), _prec)
 	case float32:
-		return bigToFloat(new(big.Int).SetUint64(uint64(value)), _prec)
+		return new(big.Float).SetPrec(_prec).SetFloat64(float64(value))
 	case float64:
-		return bigToFloat(new(big.Int).SetUint64(uint64(value)), _prec)
+		return new(big.Float).SetPrec(_prec).SetFloat64(value)
 	case string:
 		f, ok := new(big.Float).SetPrec(_prec).SetString(value)
 		if !ok {
