@@ -285,9 +285,10 @@ func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
 }
 
 type TransferOption struct {
-	Data       []byte             // option
-	AccessList types.AccessList   // option
-	Opts       *bind.TransactOpts // option
+	Data           []byte                  // option
+	AccessList     types.AccessList        // option
+	Opts           *bind.TransactOpts      // option
+	UnsendCallback func(hash string) error // option
 }
 
 func (c *Clientx) unsignedTx(privateKeyLike, to, amount any, options ...TransferOption) (tx *types.Transaction, opts *bind.TransactOpts) {
@@ -368,13 +369,13 @@ func (c *Clientx) TransferETH(privateKeyLike, to any, value ...any) (tx *types.T
 // see more: github.com/ethereum/go-ethereum/internal/ethapi/transaction_args.go:284
 func (c *Clientx) Transfer(privateKeyLike, to, amount any, options ...TransferOption) (tx *types.Transaction, err error) {
 	tx, opts := c.unsignedTx(privateKeyLike, to, amount, options...)
-	if tx, err = c.send(tx, opts); err != nil {
+	if tx, err = c.send(tx, opts, options...); err != nil {
 		return nil, err
 	}
 	return tx, nil
 }
 
-func (c *Clientx) send(tx *types.Transaction, opts *bind.TransactOpts) (signedTx *types.Transaction, err error) {
+func (c *Clientx) send(tx *types.Transaction, opts *bind.TransactOpts, options ...TransferOption) (signedTx *types.Transaction, err error) {
 	if tx, err = opts.Signer(opts.From, tx); err != nil {
 		return nil, err
 	}
@@ -384,6 +385,11 @@ func (c *Clientx) send(tx *types.Transaction, opts *bind.TransactOpts) (signedTx
 	}
 	if opts.GasLimit < gasLimit || gasLimit == 0 {
 		return nil, errors.New(fmt.Sprintf("[ERROR] Transfer::Gas required %v, but %v.\n", gasLimit, opts.GasLimit))
+	}
+	if len(options) > 0 && options[0].UnsendCallback != nil {
+		if err = options[0].UnsendCallback(tx.Hash().String()); err != nil {
+			return nil, err
+		}
 	}
 	if err = c.SendTransaction(tx, len(c.rpcMap)); err != nil {
 		return nil, err
