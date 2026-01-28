@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"math/big"
+	"strings"
+	"sync"
+	"time"
+
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -11,11 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"golang.org/x/time/rate"
-	"log"
-	"math/big"
-	"strings"
-	"sync"
-	"time"
 )
 
 type ClientxConfig struct {
@@ -289,6 +290,7 @@ type TransferOption struct {
 	AccessList     types.AccessList        // option
 	Opts           *bind.TransactOpts      // option
 	UnsendCallback func(hash string) error // option
+	MaxTry         int
 }
 
 func (c *Clientx) unsignedTx(privateKeyLike, to, amount any, options ...TransferOption) (tx *types.Transaction, opts *bind.TransactOpts) {
@@ -379,7 +381,11 @@ func (c *Clientx) send(tx *types.Transaction, opts *bind.TransactOpts, options .
 	if tx, err = opts.Signer(opts.From, tx); err != nil {
 		return nil, err
 	}
-	gasLimit, err := c.EstimateGas(CallMsg(opts.From, tx), len(c.rpcMap))
+	maxTry := 3
+	if len(options) > 0 && options[0].MaxTry > 0 {
+		maxTry = options[0].MaxTry
+	}
+	gasLimit, err := c.EstimateGas(CallMsg(opts.From, tx), maxTry)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +397,7 @@ func (c *Clientx) send(tx *types.Transaction, opts *bind.TransactOpts, options .
 			return nil, err
 		}
 	}
-	if err = c.SendTransaction(tx, len(c.rpcMap)); err != nil {
+	if err = c.SendTransaction(tx, len(c.rpcMap), maxTry); err != nil {
 		return nil, err
 	}
 	return tx, nil
