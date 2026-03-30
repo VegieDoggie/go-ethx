@@ -258,7 +258,7 @@ func (c *Clientx) errorCallback(f any, client *ethclient.Client, err error) {
 
 // TransactOpts create *bind.TransactOpts, and panic if privateKey err
 // privateKeyLike eg: 0xf1...3, f1...3, []byte, *ecdsa.PrivateKey...
-func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
+func (c *Clientx) TransactOpts(privateKeyLike any, isPending ...bool) *bind.TransactOpts {
 	_privateKey := PrivateKey(privateKeyLike)
 	opts, err := bind.NewKeyedTransactorWithChainID(_privateKey, c.chainId)
 	if err != nil {
@@ -278,7 +278,11 @@ func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
 		wg.Done()
 	}()
 	go func() {
-		opts.Nonce = BigInt(c.NonceAt(opts.From))
+		if len(isPending) > 0 && isPending[0] {
+			opts.Nonce = BigInt(c.PendingNonceAt(opts.From))
+		} else {
+			opts.Nonce = BigInt(c.NonceAt(opts.From))
+		}
 		wg.Done()
 	}()
 	wg.Wait()
