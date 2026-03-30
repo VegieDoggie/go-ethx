@@ -278,7 +278,7 @@ func (c *Clientx) TransactOpts(privateKeyLike any) *bind.TransactOpts {
 		wg.Done()
 	}()
 	go func() {
-		opts.Nonce = BigInt(c.PendingNonceAt(opts.From))
+		opts.Nonce = BigInt(c.NonceAt(opts.From))
 		wg.Done()
 	}()
 	wg.Wait()
